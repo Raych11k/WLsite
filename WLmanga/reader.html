@@ -3,9 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Чтение: Название манги - Глава 42</title>
+    <title>Читалка — WL</title>
+    <link rel="icon" href="data/icon.png" type="image/png">
+    <script>
+    if (localStorage.getItem('wl_theme') === 'dark') {
+        document.documentElement.classList.add('dark-theme');
+    }
+    </script>
     <style>
-        /* Сохраняем ту же цветовую палитру */
         :root {
             --bg-color: #ffffff;
             --text-color: #111111;
@@ -16,7 +21,7 @@
             --overlay-bg: rgba(0, 0, 0, 0.7);
         }
 
-        body.dark-theme {
+        .dark-theme {
             --bg-color: #121212;
             --text-color: #f0f0f0;
             --accent-color: #FFD000;
@@ -49,84 +54,142 @@
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 15px 40px;
+            padding: 12px 20px;
             background-color: var(--surface-bg);
             border-bottom: 2px solid var(--border-color);
+            position: sticky;
+            top: 0;
+            z-index: 50;
+            height: 60px;
         }
 
-        .back-link {
-            text-decoration: none;
+        .back-btn {
+            background: transparent;
+            border: 2px solid var(--text-color);
             color: var(--text-color);
             font-weight: 800;
-            font-size: 18px;
-            text-transform: uppercase;
-            border: 2px solid transparent;
-            padding: 5px 10px;
-            transition: all 0.2s;
+            font-size: 15px;
+            padding: 6px 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            gap: 6px;
         }
 
-        .back-link:hover {
-            border-color: var(--text-color);
+        .back-btn:hover {
             background-color: var(--accent-color);
             color: #111;
+            border-color: #111;
+            transform: translateX(-5px);
+        }
+
+        .chapter-navigation {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
         .chapter-title {
             font-weight: 800;
-            text-transform: uppercase;
-            font-size: 20px;
+            font-size: 18px;
+            letter-spacing: 0.5px;
+            text-align: center;
         }
 
-        /* --- КОНТЕЙНЕР ДЛЯ ЧТЕНИЯ --- */
+        .chapter-nav-btn {
+            background: var(--bg-color);
+            border: 2px solid var(--border-color);
+            color: var(--text-color);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+        }
+
+        .chapter-nav-btn:hover:not(:disabled) {
+            background-color: var(--accent-color);
+            border-color: #111;
+            color: #111;
+            transform: scale(1.08);
+        }
+
+        .chapter-nav-btn:disabled {
+            opacity: 0.3;
+            cursor: not-allowed;
+        }
+
+        /* --- ОСНОВНОЙ КОНТЕЙНЕР --- */
         main {
             flex: 1;
-            padding: 20px;
+            padding: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            width: 100vw;
+        }
+
+        #reader-container {
+            width: 100%;
             display: flex;
             flex-direction: column;
             align-items: center;
             position: relative;
         }
 
-        /* Классы для режимов чтения */
-        #reader-container {
-            width: 100%;
-            max-width: 800px;
-            position: relative;
-        }
-
         .manga-page {
-            width: 100%;
-            background-color: var(--surface-bg);
-            border: 2px solid var(--border-color);
-            margin-bottom: 20px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            font-weight: bold;
-            color: var(--text-color);
-            opacity: 0.8;
-            /* Пропорции страницы манги (заглушка вместо <img>) */
-            aspect-ratio: 3/4; 
+            display: block;
+            margin: 0 auto 10px auto;
         }
 
-        /* Скрываем страницы, кроме текущей, в горизонтальном режиме */
+        /* --- ПОДГОНКА ПО ШИРИНЕ ЭКРАНА --- */
+        #reader-container.fit-width {
+            max-width: 100vw;
+        }
+        #reader-container.fit-width .manga-page {
+            width: 100vw;
+            height: auto;
+            max-width: none;
+            object-fit: contain;
+        }
+
+        /* --- ПОДГОНКА ПО ВЫСОТЕ ЭКРАНА --- */
+        #reader-container.fit-height {
+            max-width: 100vw;
+            height: calc(100vh - 60px);
+            justify-content: center;
+            overflow: hidden;
+        }
+        #reader-container.fit-height .manga-page {
+            height: calc(100vh - 80px);
+            width: auto;
+            max-width: 100vw;
+            object-fit: contain;
+        }
+
+        /* --- ГОРИЗОНТАЛЬНЫЙ РЕЖИМ --- */
         .horizontal-mode .manga-page {
-            display: none;
-            margin-bottom: 0;
+            display: none !important;
         }
 
         .horizontal-mode .manga-page.active {
-            display: flex;
+            display: block !important;
         }
 
-        /* Кнопки перелистывания (прозрачные зоны по краям в горизонтальном режиме) */
         .nav-zone {
             display: none;
-            position: absolute;
-            top: 0;
+            position: fixed;
+            top: 60px;
             bottom: 0;
-            width: 50%;
+            width: 50vw;
             cursor: pointer;
             z-index: 10;
         }
@@ -138,24 +201,33 @@
         .nav-zone.prev { left: 0; }
         .nav-zone.next { right: 0; }
         
-        /* Счетчик страниц */
         #page-counter {
             display: none;
-            margin-bottom: 15px;
+            position: fixed;
+            top: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 20;
             font-weight: bold;
-            font-size: 18px;
+            font-size: 14px;
+            background-color: var(--surface-bg);
+            padding: 4px 12px;
+            border-radius: 20px;
+            border: 1px solid var(--border-color);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
         }
+
         .horizontal-mode #page-counter {
             display: block;
         }
 
-        /* --- КНОПКА НАСТРОЕК (ПЛАВАЮЩАЯ) --- */
+        /* --- КНОПКА НАСТРОЕК --- */
         .settings-btn {
             position: fixed;
-            right: 30px;
-            bottom: 30px;
-            width: 50px;
-            height: 50px;
+            right: 25px;
+            bottom: 25px;
+            width: 48px;
+            height: 48px;
             background-color: var(--accent-color);
             border: 2px solid #111;
             border-radius: 50%;
@@ -163,8 +235,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
-            box-shadow: 4px 4px 0px var(--card-hover-shadow);
+            box-shadow: 3px 3px 0px var(--card-hover-shadow);
             transition: transform 0.2s, box-shadow 0.2s;
             z-index: 100;
         }
@@ -174,11 +245,17 @@
         }
 
         .settings-btn:hover {
-            transform: translateY(-3px);
-            box-shadow: 6px 6px 0px var(--card-hover-shadow);
+            transform: translateY(-2px);
+            box-shadow: 5px 5px 0px var(--card-hover-shadow);
         }
 
-        /* --- ОКНО НАСТРОЕК (МОДАЛЬНОЕ) --- */
+        .settings-btn svg {
+            width: 22px;
+            height: 22px;
+            fill: #111;
+        }
+
+        /* --- МОДАЛЬНОЕ ОКНО --- */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -188,7 +265,7 @@
             justify-content: center;
             opacity: 0;
             pointer-events: none;
-            transition: opacity 0.3s;
+            transition: opacity 0.25s;
             z-index: 1000;
         }
 
@@ -199,13 +276,13 @@
 
         .modal-content {
             background-color: var(--bg-color);
-            padding: 30px;
+            padding: 25px;
             border: 3px solid var(--text-color);
-            border-radius: 8px;
-            box-shadow: 8px 8px 0px var(--accent-color);
+            border-radius: 12px;
+            box-shadow: 6px 6px 0px var(--accent-color);
             width: 300px;
-            transform: translateY(20px);
-            transition: transform 0.3s;
+            transform: translateY(15px);
+            transition: transform 0.25s;
         }
 
         .modal-overlay.active .modal-content {
@@ -213,34 +290,36 @@
         }
 
         .modal-content h3 {
-            margin-bottom: 20px;
-            text-transform: uppercase;
-            border-bottom: 4px solid var(--accent-color);
+            margin-bottom: 12px;
+            font-size: 16px;
+            border-bottom: 3px solid var(--accent-color);
             display: inline-block;
-            padding-bottom: 5px;
+            padding-bottom: 3px;
+        }
+
+        .modal-content h3:not(:first-of-type) {
+            margin-top: 15px;
         }
 
         .radio-group {
             display: flex;
             flex-direction: column;
-            gap: 15px;
-            margin-bottom: 25px;
+            gap: 10px;
         }
 
         .radio-group label {
-            font-size: 16px;
-            font-weight: bold;
+            font-size: 15px;
+            font-weight: 600;
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 10px;
         }
 
-        /* Стилизация радио-кнопок */
         input[type="radio"] {
             appearance: none;
-            width: 20px;
-            height: 20px;
+            width: 18px;
+            height: 18px;
             border: 2px solid var(--text-color);
             border-radius: 50%;
             position: relative;
@@ -252,20 +331,21 @@
             position: absolute;
             top: 50%; left: 50%;
             transform: translate(-50%, -50%);
-            width: 10px;
-            height: 10px;
+            width: 8px;
+            height: 8px;
             background-color: var(--accent-color);
             border-radius: 50%;
         }
 
         .close-modal-btn {
             width: 100%;
-            padding: 10px;
+            margin-top: 20px;
+            padding: 8px;
             background-color: transparent;
             border: 2px solid var(--text-color);
             color: var(--text-color);
             font-weight: bold;
-            text-transform: uppercase;
+            border-radius: 6px;
             cursor: pointer;
             transition: all 0.2s;
         }
@@ -279,51 +359,52 @@
 <body>
 
     <header>
-        <a href="main.html" class="back-link">Назад</a>
-        <div class="chapter-title">Название манги - Глава 42</div>
-        <div style="width: 80px;"></div> <!-- Пустой блок для центрирования заголовка -->
+        <button class="back-btn" onclick="history.back()">← Назад</button>
+        
+        <div class="chapter-navigation">
+            <button class="chapter-nav-btn" id="prev-chapter-btn" title="Предыдущая глава">◄</button>
+            <div class="chapter-title" id="chapter-title">Загрузка...</div>
+            <button class="chapter-nav-btn" id="next-chapter-btn" title="Следующая глава">►</button>
+        </div>
+
+        <div style="width: 85px;"></div>
     </header>
 
     <main>
-        <div id="page-counter">Страница <span id="current-page-num">1</span> из <span id="total-pages-num">5</span></div>
+        <div id="page-counter">Страница <span id="current-page-num">1</span> из <span id="total-pages-num">1</span></div>
         
-        <div id="reader-container" class="vertical-mode">
-            <!-- Зоны клика для горизонтального режима -->
+        <div id="reader-container" class="vertical-mode fit-width">
             <div class="nav-zone prev" id="nav-prev" title="Предыдущая страница"></div>
             <div class="nav-zone next" id="nav-next" title="Следующая страница"></div>
-
-            <!-- Заглушки страниц (в реальном проекте тут будут теги <img>) -->
-            <div class="manga-page active">Страница 1 (Картинка)</div>
-            <div class="manga-page">Страница 2 (Картинка)</div>
-            <div class="manga-page">Страница 3 (Картинка)</div>
-            <div class="manga-page">Страница 4 (Картинка)</div>
-            <div class="manga-page">Страница 5 (Картинка)</div>
+            <div id="pages-wrapper"></div>
         </div>
     </main>
 
-    <!-- Плавающая кнопка настроек -->
-    <button class="settings-btn" id="open-settings">⚙</button>
+    <button class="settings-btn" id="open-settings" title="Настройки чтения">
+        <svg viewBox="0 0 24 24">
+            <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/>
+        </svg>
+    </button>
 
-    <!-- Модальное окно настроек -->
     <div class="modal-overlay" id="settings-modal">
         <div class="modal-content">
-            <h3>Настройки</h3>
+            <h3>Режим чтения</h3>
             <div class="radio-group">
                 <label>
-                    <input type="radio" name="read-mode" value="vertical" checked>
-                    Вертикально
+                    <input type="radio" name="read-mode" value="vertical" checked> Вертикально
                 </label>
                 <label>
-                    <input type="radio" name="read-mode" value="horizontal">
-                    Горизонтально
+                    <input type="radio" name="read-mode" value="horizontal"> Горизонтально
                 </label>
             </div>
-            
-            <!-- Добавил переключатель темы сюда для удобства -->
-            <div class="radio-group" style="border-top: 2px dashed var(--border-color); padding-top: 15px;">
+
+            <h3>Вид изображения</h3>
+            <div class="radio-group">
                 <label>
-                    <input type="checkbox" id="theme-toggle-reader">
-                    Тёмная тема
+                    <input type="radio" name="fit-mode" value="width" checked> По ширине экрана
+                </label>
+                <label>
+                    <input type="radio" name="fit-mode" value="height"> По высоте экрана
                 </label>
             </div>
 
@@ -332,72 +413,90 @@
     </div>
 
     <script>
-        // Элементы
+        const REPO_NAME = 'Raych11k/WLsite';
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const titleId = urlParams.get('title');
+        const chapterId = urlParams.get('chapter');
+
         const readerContainer = document.getElementById('reader-container');
-        const pages = document.querySelectorAll('.manga-page');
-        const totalPages = pages.length;
+        const pagesWrapper = document.getElementById('pages-wrapper');
+        const chapterTitleEl = document.getElementById('chapter-title');
         const currentPageNum = document.getElementById('current-page-num');
         const totalPagesNum = document.getElementById('total-pages-num');
-        
-        // Модальное окно
+        const prevChapterBtn = document.getElementById('prev-chapter-btn');
+        const nextChapterBtn = document.getElementById('next-chapter-btn');
+
         const settingsModal = document.getElementById('settings-modal');
         const openSettingsBtn = document.getElementById('open-settings');
         const closeSettingsBtn = document.getElementById('close-settings');
-        
-        // Настройки
         const modeRadios = document.getElementsByName('read-mode');
-        const themeCheckbox = document.getElementById('theme-toggle-reader');
+        const fitModeRadios = document.getElementsByName('fit-mode');
         
-        // Навигация горизонтальная
         const navPrev = document.getElementById('nav-prev');
         const navNext = document.getElementById('nav-next');
 
         let currentPageIndex = 0;
         let isHorizontal = false;
+        let totalPages = 0;
 
-        totalPagesNum.textContent = totalPages;
+        // Загрузка настроек
+        const savedMode = localStorage.getItem('wl_read_mode') || 'vertical';
+        const savedFit = localStorage.getItem('wl_fit_mode') || 'width';
 
-        // Открытие / закрытие настроек
-        openSettingsBtn.addEventListener('click', () => {
-            settingsModal.classList.add('active');
+        modeRadios.forEach(radio => {
+            if (radio.value === savedMode) radio.checked = true;
         });
+        if (savedMode === 'horizontal') {
+            isHorizontal = true;
+            readerContainer.classList.add('horizontal-mode');
+        } else {
+            isHorizontal = false;
+            readerContainer.classList.add('vertical-mode');
+        }
 
-        closeSettingsBtn.addEventListener('click', () => {
-            settingsModal.classList.remove('active');
+        fitModeRadios.forEach(radio => {
+            if (radio.value === savedFit) radio.checked = true;
         });
+        readerContainer.classList.add(`fit-${savedFit}`);
 
-        // Закрытие при клике вне окна
-        settingsModal.addEventListener('click', (e) => {
-            if (e.target === settingsModal) {
-                settingsModal.classList.remove('active');
-            }
-        });
+        openSettingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
+        closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
+        settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.classList.remove('active'); });
 
-        // Смена режима чтения
         modeRadios.forEach(radio => {
             radio.addEventListener('change', (e) => {
-                if (e.target.value === 'horizontal') {
+                const mode = e.target.value;
+                localStorage.setItem('wl_read_mode', mode);
+                if (mode === 'horizontal') {
                     isHorizontal = true;
-                    readerContainer.className = 'horizontal-mode';
+                    readerContainer.classList.remove('vertical-mode');
+                    readerContainer.classList.add('horizontal-mode');
                     updateHorizontalView();
                 } else {
                     isHorizontal = false;
-                    readerContainer.className = 'vertical-mode';
+                    readerContainer.classList.remove('horizontal-mode');
+                    readerContainer.classList.add('vertical-mode');
                 }
             });
         });
 
-        // Логика горизонтального перелистывания
+        fitModeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const fit = e.target.value;
+                localStorage.setItem('wl_fit_mode', fit);
+                readerContainer.classList.remove('fit-width', 'fit-height');
+                readerContainer.classList.add(`fit-${fit}`);
+            });
+        });
+
         function updateHorizontalView() {
+            const pages = pagesWrapper.querySelectorAll('.manga-page');
             pages.forEach((page, index) => {
-                if (index === currentPageIndex) {
-                    page.classList.add('active');
-                } else {
-                    page.classList.remove('active');
-                }
+                page.classList.toggle('active', index === currentPageIndex);
             });
             currentPageNum.textContent = currentPageIndex + 1;
-            window.scrollTo(0, 0); // Прокрутка наверх при смене страницы
+            window.scrollTo(0, 0);
         }
 
         navNext.addEventListener('click', () => {
@@ -414,14 +513,67 @@
             }
         });
 
-        // Переключение темы (синхронизировано с чекбоксом)
-        themeCheckbox.addEventListener('change', (e) => {
-            if (e.target.checked) {
-                document.body.classList.add('dark-theme');
-            } else {
-                document.body.classList.remove('dark-theme');
+        async function loadReader() {
+            if (!titleId || !chapterId) {
+                chapterTitleEl.textContent = 'Ошибка: Глава не найдена';
+                return;
             }
-        });
+
+            try {
+                const chapRes = await fetch(`https://raw.githubusercontent.com/${REPO_NAME}/main/titles/${titleId}/chapters.json`);
+                if (!chapRes.ok) throw new Error('Ошибка загрузки данных');
+
+                const chapters = await chapRes.json();
+                const currentChapterIndex = chapters.findIndex(c => c.id === chapterId);
+
+                if (currentChapterIndex === -1) {
+                    chapterTitleEl.textContent = 'Глава не найдена';
+                    return;
+                }
+
+                const currentChapter = chapters[currentChapterIndex];
+                chapterTitleEl.textContent = `Том ${currentChapter.volume} Глава ${currentChapter.number}`;
+
+                if (currentChapterIndex < chapters.length - 1) {
+                    const nextChap = chapters[currentChapterIndex + 1];
+                    nextChapterBtn.onclick = () => window.location.href = `reader.html?title=${titleId}&chapter=${nextChap.id}`;
+                    nextChapterBtn.disabled = false;
+                } else {
+                    nextChapterBtn.disabled = true;
+                }
+
+                if (currentChapterIndex > 0) {
+                    const prevChap = chapters[currentChapterIndex - 1];
+                    prevChapterBtn.onclick = () => window.location.href = `reader.html?title=${titleId}&chapter=${prevChap.id}`;
+                    prevChapterBtn.disabled = false;
+                } else {
+                    prevChapterBtn.disabled = true;
+                }
+
+                pagesWrapper.innerHTML = '';
+                const pagesList = currentChapter.pages || [];
+                totalPages = pagesList.length;
+                totalPagesNum.textContent = totalPages;
+
+                pagesList.forEach((pagePath, index) => {
+                    const img = document.createElement('img');
+                    img.src = `https://raw.githubusercontent.com/${REPO_NAME}/main/${pagePath}`;
+                    img.className = 'manga-page';
+                    if (index === 0) img.classList.add('active');
+                    pagesWrapper.appendChild(img);
+                });
+
+                if (isHorizontal) {
+                    updateHorizontalView();
+                }
+
+            } catch (err) {
+                console.error(err);
+                chapterTitleEl.textContent = 'Ошибка сети';
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', loadReader);
     </script>
 </body>
 </html>

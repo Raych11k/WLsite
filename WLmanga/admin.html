@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Админ-панель WL</title>
+    <link rel="icon" href="data/admin_icon.png" type="image/png">
     <style>
         :root {
             --bg: #121212;
@@ -340,11 +341,7 @@
 
             <div class="cover-inputs">
                 <div class="form-group" style="margin-bottom: 0;">
-                    <label>Обложка тайтла</label>
-                    <label for="cover-file-input" class="file-label-btn">📁 Выбрать файл обложки</label>
-                </div>
-                <div class="form-group" style="margin-bottom: 0;">
-                    <label>Название тайтла (Рус)</label>
+                    <label>Название тайтла на русском</label>
                     <input type="text" id="title-name" placeholder="Человек-Бензопила">
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
@@ -356,12 +353,12 @@
 
         <div class="form-group">
             <label>Описание</label>
-            <textarea id="title-desc" rows="4" placeholder="Синопсис..."></textarea>
+            <textarea id="title-desc" rows="4" placeholder="Я в своём познании настолько преисполнился, что я как будто бы уже сто триллионов миллиардов лет проживаю на триллионах и триллионах таких же планет, понимаешь, как эта Земля. Мне уже этот мир абсолютно понятен, и я здесь ищу только одного: покоя, умиротворения и вот этой гармонии от слияния с бесконечно вечным…"></textarea>
         </div>
 
         <!-- Поле выбора жанров -->
         <div class="form-group">
-            <label>Жанры (выберите один или несколько):</label>
+            <label>Жанры:</label>
             <div class="genres-chips-box" id="create-genres-box"></div>
         </div>
 
@@ -369,10 +366,10 @@
             <div class="form-group">
                 <label>Тип тайтла</label>
                 <select id="title-type">
-                    <option value="Манга">Манга (Япония)</option>
-                    <option value="Манхва">Манхва (Корея)</option>
-                    <option value="Маньхуа">Маньхуа (Китай)</option>
-                    <option value="Комикс">Комикс (Запад)</option>
+                    <option value="Манга">Манга</option>
+                    <option value="Манхва">Манхва</option>
+                    <option value="Маньхуа">Маньхуа</option>
+                    <option value="Комикс">Комикс</option>
                     <option value="OEL-Манга">OEL-Манга</option>
                 </select>
             </div>
@@ -385,10 +382,10 @@
         <div class="form-group">
             <label>Статус</label>
             <select id="title-status">
-                <option value="Выпускается">Выпускается</option>
+                <option value="Онгоинг">Онгоинг</option>
                 <option value="Завершён">Завершён</option>
-                <option value="Заморожен">Заморожен</option>
-                <option value="Брошен">Брошен (Кладбище)</option>
+                <option value="Отложен">Отложен</option>
+                <option value="Брошен">Брошен</option>
             </select>
         </div>
 
@@ -440,8 +437,8 @@
         <div class="form-group">
             <label>2. Что редактируем?</label>
             <select id="edit-mode-select">
-                <option value="title">Информация о тайтле (Название, Описание, Жанры, Статус)</option>
-                <option value="chapter">Конкретную главу</option>
+                <option value="title">Информация о тайтле</option>
+                <option value="chapter">Конкретная глава</option>
             </select>
         </div>
 
@@ -455,52 +452,52 @@
         <!-- Поля редактирования ТАЙТЛА -->
         <div class="edit-section" id="edit-title-form">
             <div class="form-group">
-                <label>Изменить название (Рус)</label>
+                <label>Название на русском</label>
                 <input type="text" id="edit-title-name">
             </div>
             <div class="form-group">
-                <label>Изменить оригинальное название</label>
+                <label>Оригинальное название</label>
                 <input type="text" id="edit-title-orig-name">
             </div>
             <div class="form-group">
-                <label>Изменить описание</label>
+                <label>Описание</label>
                 <textarea id="edit-title-desc" rows="4"></textarea>
             </div>
 
             <div class="form-group">
-                <label>Изменить жанры:</label>
+                <label>Жанры:</label>
                 <div class="genres-chips-box" id="edit-genres-box"></div>
             </div>
 
             <div class="two-cols">
                 <div class="form-group">
-                    <label>Изменить тип тайтла</label>
+                    <label>Тип тайтла</label>
                     <select id="edit-title-type">
-                        <option value="Манга">Манга (Япония)</option>
-                        <option value="Манхва">Манхва (Корея)</option>
-                        <option value="Маньхуа">Маньхуа (Китай)</option>
-                        <option value="Комикс">Комикс (Запад)</option>
+                        <option value="Манга">Манга</option>
+                        <option value="Манхва">Манхва</option>
+                        <option value="Маньхуа">Маньхуа</option>
+                        <option value="Комикс">Комикс</option>
                         <option value="OEL-Манга">OEL-Манга</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Изменить год выпуска</label>
+                    <label>Год выпуска</label>
                     <input type="number" id="edit-title-year" placeholder="2026">
                 </div>
             </div>
 
             <div class="two-cols">
                 <div class="form-group">
-                    <label>Изменить статус</label>
+                    <label>Статус</label>
                     <select id="edit-title-status">
-                        <option value="Выпускается">Выпускается</option>
+                        <option value="Онгоинг">Онгоинг</option>
                         <option value="Завершён">Завершён</option>
-                        <option value="Заморожен">Заморожен</option>
-                        <option value="Брошен">Брошен (Кладбище)</option>
+                        <option value="Отложен">Отложен</option>
+                        <option value="Брошен">Брошен</option>
                     </select>
                 </div>
                 <div class="form-group">
-                    <label>Заменить обложку (опционально)</label>
+                    <label>Заменить обложку</label>
                     <label for="edit-cover-input" class="file-label-btn">📁 Выбрать новую обложку</label>
                     <input type="file" id="edit-cover-input" accept="image/*">
                 </div>
@@ -516,11 +513,11 @@
         <div class="edit-section" id="edit-chapter-form" style="display: none;">
             <div class="two-cols">
                 <div class="form-group">
-                    <label>Изменить номер тома</label>
+                    <label>Номер тома</label>
                     <input type="number" id="edit-chapter-volume" placeholder="1" min="1">
                 </div>
                 <div class="form-group">
-                    <label>Изменить название/номер главы</label>
+                    <label>Название/номер главы</label>
                     <input type="text" id="edit-chapter-name">
                 </div>
             </div>
@@ -546,10 +543,15 @@
 
 <script>
     const DEFAULT_GENRES = [
-        "Боевик", "Драма", "Исекай", "Комедия", "Музыка", 
-        "Повседневность", "Приключения", "Романтика", "Спорт", 
-        "Ужасы", "Фантастика", "Фэнтези", "Этти"
+        "Боевик", "Драма", "Исекай", "Комедия", "Мистика", 
+        "Сверхъестественное", "Музыка", "Повседневность", 
+        "Приключения", "Романтика", "Спорт", "Ужасы", 
+        "Фантастика", "Фэнтези", "Этти"
     ].sort((a, b) => a.localeCompare(b, 'ru'));
+
+    // Кэш для быстрого доступа к данным
+    let loadedTitlesData = {};
+    let currentTitleChapters = [];
 
     function initGenreChips(containerId, activeGenres = []) {
         const container = document.getElementById(containerId);
@@ -583,7 +585,6 @@
         return { repo, token };
     }
 
-    // Чтение файла в Base64
     function fileToBase64(file) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -593,7 +594,6 @@
         });
     }
 
-    // Функция сжатия и конвертации изображения в WebP
     function compressImage(file, maxWidth = 1600, quality = 0.82) {
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
@@ -641,7 +641,6 @@
         });
     }
 
-    // Функция получения файла с GitHub (чтобы узнать SHA перед обновлением)
     async function getGithubFile(path) {
         const creds = getGHCredentials();
         if (!creds) return null;
@@ -658,7 +657,6 @@
         return null;
     }
 
-    // Функция загрузки/обновления файла в GitHub
     async function uploadToGithub(path, contentBase64, commitMessage, sha = null) {
         const creds = getGHCredentials();
         if (!creds) return null;
@@ -686,7 +684,25 @@
         return await res.json();
     }
 
-    // Транслитерация наименований в безопасные папки
+    async function deleteGithubFile(path, commitMessage) {
+        const creds = getGHCredentials();
+        if (!creds) return;
+        const fileInfo = await getGithubFile(path);
+        if (!fileInfo) return;
+
+        await fetch(`https://api.github.com/repos/${creds.repo}/contents/${path}`, {
+            method: 'DELETE',
+            headers: {
+                'Authorization': `token ${creds.token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                message: commitMessage,
+                sha: fileInfo.sha
+            })
+        });
+    }
+
     function slugify(text) {
         return text.toString().toLowerCase()
             .replace(/\s+/g, '-')
@@ -728,6 +744,8 @@
 
     // Обработка обложки
     let selectedCoverFile = null;
+    let editSelectedCoverFile = null;
+
     const coverFileInput = document.getElementById('cover-file-input');
     const coverPreviewBox = document.getElementById('cover-preview-box');
 
@@ -741,6 +759,13 @@
                 coverPreviewBox.textContent = '';
             };
             reader.readAsDataURL(file);
+        }
+    });
+
+    document.getElementById('edit-cover-input').addEventListener('change', (e) => {
+        if (e.target.files[0]) {
+            editSelectedCoverFile = e.target.files[0];
+            alert("Выбрана новая обложка: " + editSelectedCoverFile.name);
         }
     });
 
@@ -768,7 +793,10 @@
             thumb.appendChild(removeBtn);
 
             if (typeof file === 'string') {
-                thumb.style.backgroundImage = `url('${file}')`;
+                // Если передана прямая ссылка или относительный путь
+                const creds = getGHCredentials();
+                const rawUrl = file.startsWith('http') ? file : `https://raw.githubusercontent.com/${creds.repo}/main/${file}`;
+                thumb.style.backgroundImage = `url('${rawUrl}')`;
             } else {
                 const reader = new FileReader();
                 reader.onload = (event) => {
@@ -833,6 +861,7 @@
             }
 
             const mangaList = [];
+            loadedTitlesData = {};
 
             for (const folder of folders) {
                 try {
@@ -848,6 +877,7 @@
                         const decodedContent = decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, ''))));
                         const data = JSON.parse(decodedContent);
                         mangaList.push(data);
+                        loadedTitlesData[data.id] = data;
                     }
                 } catch (e) {
                     console.error(`Ошибка загрузки data.json для ${folder.name}`, e);
@@ -871,6 +901,76 @@
             });
         }
     }
+
+    // --- ЛОГИКА АВТОПОДСТАНОВКИ ДАННЫХ ПРИ ВЫБОРЕ ТАЙТЛА ---
+    const editMangaSelect = document.getElementById('edit-manga-select');
+    const editChapterSelect = document.getElementById('edit-chapter-select');
+
+    editMangaSelect.addEventListener('change', async () => {
+        const titleId = editMangaSelect.value;
+        if (!titleId || !loadedTitlesData[titleId]) return;
+
+        const data = loadedTitlesData[titleId];
+
+        // 1. Подстановка данных тайтла в форму
+        document.getElementById('edit-title-name').value = data.name || '';
+        document.getElementById('edit-title-orig-name').value = data.origName || '';
+        document.getElementById('edit-title-desc').value = data.description || '';
+        document.getElementById('edit-title-type').value = data.type || 'Манга';
+        document.getElementById('edit-title-year').value = data.year || '';
+        document.getElementById('edit-title-status').value = data.status || 'Онгоинг';
+
+        initGenreChips('edit-genres-box', data.genres || []);
+
+        // 2. Загрузка глав выбранного тайтла для селектора глав
+        editChapterSelect.innerHTML = '<option value="">Загрузка глав...</option>';
+        currentTitleChapters = [];
+
+        try {
+            const creds = getGHCredentials();
+            const res = await fetch(`https://api.github.com/repos/${creds.repo}/contents/titles/${titleId}/chapters.json`, {
+                headers: { 
+                    'Authorization': `token ${creds.token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+
+            if (res.ok) {
+                const fileData = await res.json();
+                const decoded = decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, ''))));
+                currentTitleChapters = JSON.parse(decoded);
+
+                editChapterSelect.innerHTML = '<option value="">Выберите главу...</option>';
+                currentTitleChapters.forEach(ch => {
+                    const opt = document.createElement('option');
+                    opt.value = ch.id;
+                    opt.textContent = `Том ${ch.volume} - Глава ${ch.number}`;
+                    editChapterSelect.appendChild(opt);
+                });
+            } else {
+                editChapterSelect.innerHTML = '<option value="">Главы отсутствуют</option>';
+            }
+        } catch (e) {
+            console.error('Ошибка загрузки глав:', e);
+            editChapterSelect.innerHTML = '<option value="">Ошибка загрузки глав</option>';
+        }
+    });
+
+    // --- ЛОГИКА АВТОПОДСТАНОВКИ ДАННЫХ ПРИ ВЫБОРЕ ГЛАВЫ ---
+    editChapterSelect.addEventListener('change', () => {
+        const chapterId = editChapterSelect.value;
+        if (!chapterId) return;
+
+        const ch = currentTitleChapters.find(c => c.id === chapterId);
+        if (!ch) return;
+
+        document.getElementById('edit-chapter-volume').value = ch.volume || 1;
+        document.getElementById('edit-chapter-name').value = ch.number || '';
+
+        // Подгружаем существующие страницы
+        editPagesFiles = ch.pages ? [...ch.pages] : [];
+        renderPagePreviews(editPagesFiles, 'edit-pages-preview');
+    });
 
     // --- СОЗДАНИЕ ТАЙТЛА В КОРНЕВОЙ ПАПКЕ ---
     document.getElementById('save-title-btn').addEventListener('click', async () => {
@@ -948,15 +1048,11 @@
         try {
             const chapterSlug = `vol-${volumeNum}-ch-${slugify(chapterNum)}`;
             const uploadedPagePaths = [];
-            
 
-            // 1. Сжимаем и загружаем каждую страницу главы на GitHub в формате WebP
             for (let i = 0; i < createPagesFiles.length; i++) {
                 const file = createPagesFiles[i];
-                
                 btn.textContent = `Сжатие и загрузка ${i + 1} из ${createPagesFiles.length}...`;
 
-                // Сжимаем картинку до макс. ширины 1600px и конвертируем в WebP (качество 82%)
                 const compressedFile = await compressImage(file, 1600, 0.82);
 
                 const pageNum = String(i + 1).padStart(3, '0');
@@ -967,7 +1063,6 @@
                 uploadedPagePaths.push(pagePath);
             }
 
-            // 2. Создаем или обновляем chapters.json тайтла
             btn.textContent = "Сохранение метаданных главы...";
             const chaptersJsonPath = `titles/${mangaSlug}/chapters.json`;
             
@@ -990,7 +1085,6 @@
                 createdAt: new Date().toISOString()
             };
 
-            // Перезаписываем или добавляем новую главу
             const existingIndex = chaptersList.findIndex(c => c.id === chapterSlug);
             if (existingIndex !== -1) {
                 chaptersList[existingIndex] = newChapterData;
@@ -998,7 +1092,6 @@
                 chaptersList.push(newChapterData);
             }
 
-            // Сортировка глав по тому и номеру
             chaptersList.sort((a, b) => a.volume - b.volume || parseFloat(a.number) - parseFloat(b.number));
 
             const jsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(chaptersList, null, 2))));
@@ -1017,19 +1110,207 @@
         }
     });
 
-    // Заглушки на редактирование/удаление
-    document.getElementById('update-title-btn').addEventListener('click', () => {
-        alert("Изменения отправлены в GitHub!");
-    });
+    // --- ОБНОВЛЕНИЕ ТАЙТЛА ---
+    document.getElementById('update-title-btn').addEventListener('click', async () => {
+        const creds = getGHCredentials();
+        const titleId = editMangaSelect.value;
+        if (!creds || !titleId) return alert("Выберите тайтл для обновления!");
 
-    document.getElementById('delete-title-btn').addEventListener('click', () => {
-        if (confirm("Вы уверены, что хотите удалить этот тайтл из репозитория?")) {
-            alert("Запрос на удаление отправлен.");
+        const btn = document.getElementById('update-title-btn');
+        btn.disabled = true;
+        btn.textContent = "Сохранение...";
+
+        try {
+            const existingData = loadedTitlesData[titleId] || {};
+            let coverPath = existingData.cover;
+
+            // Если выбрана новая обложка, загружаем её
+            if (editSelectedCoverFile) {
+                // 1. Удаляем старую обложку, если она существует в данных
+                if (existingData.cover) {
+                    await deleteGithubFile(existingData.cover, `Delete old cover for ${titleId}`);
+                }
+
+                // 2. Сжимаем и конвертируем новую обложку в WebP
+                btn.textContent = "Сжатие обложки...";
+                const compressedCover = await compressImage(editSelectedCoverFile, 1200, 0.85);
+                
+                // 3. Формируем единый путь .webp
+                const newCoverPath = `titles/${titleId}/cover.webp`;
+                const coverBase64 = await fileToBase64(compressedCover);
+
+                btn.textContent = "Загрузка обложки...";
+                await uploadToGithub(newCoverPath, coverBase64, `Upload new webp cover for ${titleId}`);
+                
+                coverPath = newCoverPath;
+            }
+
+            const updatedJson = {
+                ...existingData,
+                name: document.getElementById('edit-title-name').value.trim(),
+                origName: document.getElementById('edit-title-orig-name').value.trim(),
+                description: document.getElementById('edit-title-desc').value.trim(),
+                genres: getSelectedGenres('edit-genres-box'),
+                type: document.getElementById('edit-title-type').value,
+                year: document.getElementById('edit-title-year').value,
+                status: document.getElementById('edit-title-status').value,
+                cover: coverPath,
+                updatedAt: new Date().toISOString()
+            };
+
+            const jsonPath = `titles/${titleId}/data.json`;
+            const existingFile = await getGithubFile(jsonPath);
+            const jsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(updatedJson, null, 2))));
+
+            await uploadToGithub(jsonPath, jsonBase64, `Update title ${titleId}`, existingFile ? existingFile.sha : null);
+
+            alert("Данные тайтла успешно обновлены!");
+            await loadMangaList();
+
+        } catch (err) {
+            alert("Ошибка обновления: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Сохранить изменения";
         }
     });
 
-    document.getElementById('update-chapter-btn').addEventListener('click', () => alert("Глава обновлена!"));
-    document.getElementById('delete-chapter-btn').addEventListener('click', () => confirm("Удалить главу?") && alert("Удалено!"));
+    // --- УДАЛЕНИЕ ТАЙТЛА ---
+    document.getElementById('delete-title-btn').addEventListener('click', async () => {
+        const titleId = editMangaSelect.value;
+        if (!titleId) return alert("Выберите тайтл!");
+
+        if (confirm(`Вы уверены, что хотите удалить тайтл "${titleId}"? Потребуется удалить файл data.json.`)) {
+            try {
+                await deleteGithubFile(`titles/${titleId}/data.json`, `Delete title ${titleId}`);
+                alert("Тайтл удален из списка!");
+                await loadMangaList();
+            } catch (err) {
+                alert("Ошибка удаления: " + err.message);
+            }
+        }
+    });
+
+    // --- ОБНОВЛЕНИЕ ГЛАВЫ ---
+    document.getElementById('update-chapter-btn').addEventListener('click', async () => {
+    const titleId = editMangaSelect.value;
+    const chapterId = editChapterSelect.value;
+    if (!titleId || !chapterId) return alert("Выберите тайтл и главу!");
+
+    const btn = document.getElementById('update-chapter-btn');
+    btn.disabled = true;
+
+    try {
+        const volumeNum = document.getElementById('edit-chapter-volume').value.trim() || "1";
+        const chapterNum = document.getElementById('edit-chapter-name').value.trim();
+
+        // 1. Читаем chapters.json для получения списка старых файлов
+        const chaptersJsonPath = `titles/${titleId}/chapters.json`;
+        const existingFile = await getGithubFile(chaptersJsonPath);
+        if (!existingFile) throw new Error("Файл chapters.json не найден");
+
+        const decoded = decodeURIComponent(escape(atob(existingFile.content.replace(/\n/g, ''))));
+        let chaptersList = JSON.parse(decoded);
+        const currentChapter = chaptersList.find(c => c.id === chapterId);
+
+        // 2. УДАЛЯЕМ ВСЕ СТАРЫЕ ФАЙЛЫ ГЛАВЫ
+        if (currentChapter && currentChapter.pages) {
+            btn.textContent = "Удаление старых страниц...";
+            for (const oldPagePath of currentChapter.pages) {
+                await deleteGithubFile(oldPagePath, `Clean old page ${oldPagePath}`);
+            }
+        }
+
+        // 3. СЖИМАЕМ И ЗАГРУЖАЕМ НОВЫЕ СТРАНИЦЫ
+        const newPagesPaths = [];
+        for (let i = 0; i < editPagesFiles.length; i++) {
+            btn.textContent = `Сжатие и загрузка страницы ${i + 1} из ${editPagesFiles.length}...`;
+            
+            const fileItem = editPagesFiles[i];
+            
+            // Если в массиве уже File/Blob, сжимаем. Если по ошибке пришла строка — пропускаем сжатие
+            const compressedPage = (fileItem instanceof File || fileItem instanceof Blob) 
+                ? await compressImage(fileItem, 1600, 0.82) 
+                : fileItem;
+
+            const pageNum = String(i + 1).padStart(3, '0');
+            const pagePath = `titles/${titleId}/chapters/${chapterId}/${pageNum}.webp`;
+
+            const pageBase64 = await fileToBase64(compressedPage);
+            await uploadToGithub(pagePath, pageBase64, `Upload page ${pageNum} for ${chapterId}`);
+            
+            newPagesPaths.push(pagePath);
+        }
+
+        // 4. ОБНОВЛЯЕМ JSON
+        const chIndex = chaptersList.findIndex(c => c.id === chapterId);
+        if (chIndex !== -1) {
+            chaptersList[chIndex].volume = parseInt(volumeNum, 10);
+            chaptersList[chIndex].number = chapterNum;
+            chaptersList[chIndex].pagesCount = newPagesPaths.length;
+            chaptersList[chIndex].pages = newPagesPaths;
+        }
+
+        const jsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(chaptersList, null, 2))));
+        await uploadToGithub(chaptersJsonPath, jsonBase64, `Update chapter ${chapterId}`, existingFile.sha);
+
+        alert("Глава успешно перезаписана и сжата!");
+        editMangaSelect.dispatchEvent(new Event('change'));
+
+    } catch (err) {
+        alert("Ошибка обновления главы: " + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = "Сохранить главу";
+    }
+});
+
+    // --- УДАЛЕНИЕ ГЛАВЫ ---
+    document.getElementById('delete-chapter-btn').addEventListener('click', async () => {
+    const titleId = editMangaSelect.value;
+    const chapterId = editChapterSelect.value;
+    if (!titleId || !chapterId) return alert("Выберите тайтл и главу!");
+
+    if (confirm("Вы уверены, что хотите полностью удалить эту главу и все её файлы?")) {
+        const btn = document.getElementById('delete-chapter-btn');
+        btn.disabled = true;
+        btn.textContent = "Удаление файлов главы...";
+
+        try {
+            const chaptersJsonPath = `titles/${titleId}/chapters.json`;
+            const existingFile = await getGithubFile(chaptersJsonPath);
+            if (!existingFile) throw new Error("Файл chapters.json не найден");
+
+            const decoded = decodeURIComponent(escape(atob(existingFile.content.replace(/\n/g, ''))));
+            let chaptersList = JSON.parse(decoded);
+
+            // Находим нужную главу, чтобы забрать список её страниц
+            const chapterToDelete = chaptersList.find(c => c.id === chapterId);
+
+            // 1. УДАЛЯЕМ КАЖДЫЙ ФАЙЛ СТРАНИЦЫ С GITHUB
+            if (chapterToDelete && chapterToDelete.pages && Array.isArray(chapterToDelete.pages)) {
+                for (const pagePath of chapterToDelete.pages) {
+                    await deleteGithubFile(pagePath, `Delete page ${pagePath}`);
+                }
+            }
+
+            // 2. Убираем главу из общего массива
+            chaptersList = chaptersList.filter(c => c.id !== chapterId);
+
+            // 3. Обновляем chapters.json на GitHub
+            const jsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(chaptersList, null, 2))));
+            await uploadToGithub(chaptersJsonPath, jsonBase64, `Delete chapter ${chapterId}`, existingFile.sha);
+
+            alert("Глава и все её файлы успешно удалены!");
+            editMangaSelect.dispatchEvent(new Event('change'));
+        } catch (err) {
+            alert("Ошибка удаления главы: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Удалить главу"; // Верните текст вашей кнопки, если он отличается
+        }
+    }
+});
 
     window.addEventListener('DOMContentLoaded', () => {
         initGenreChips('create-genres-box');
