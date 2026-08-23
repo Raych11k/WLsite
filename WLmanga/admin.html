@@ -1,0 +1,1060 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Админ-панель WL</title>
+    <style>
+        :root {
+            --bg: #121212;
+            --card: #1e1e1e;
+            --accent: #FFD000;
+            --text: #ffffff;
+            --border: #333333;
+            --danger: #ff4444;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 40px 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .admin-container { width: 100%; max-width: 850px; }
+        .header-center { text-align: center; }
+        
+        h1 {
+            text-transform: uppercase;
+            margin-bottom: 30px;
+            border-bottom: 4px solid var(--accent);
+            display: inline-block;
+            padding-bottom: 5px;
+        }
+
+        .settings-box {
+            background: var(--card);
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 30px;
+            display: flex;
+            gap: 15px;
+            align-items: flex-end;
+        }
+
+        /* Вкладки */
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px 10px;
+            background: var(--card);
+            color: var(--text);
+            border: 2px solid var(--border);
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.2s;
+            border-radius: 8px 8px 0 0;
+            font-size: 13px;
+        }
+
+        .tab-btn.active {
+            background: var(--accent);
+            color: #111;
+            border-color: var(--accent);
+        }
+
+        .tab-content {
+            display: none;
+            background: var(--card);
+            padding: 30px;
+            border-radius: 0 8px 8px 8px;
+            border: 2px solid var(--border);
+            box-shadow: 8px 8px 0px var(--accent);
+        }
+
+        .tab-content.active { display: block; }
+
+        .form-group { margin-bottom: 20px; }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            font-size: 14px;
+            color: #aaa;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            background: #111;
+            border: 1px solid var(--border);
+            color: #fff;
+            border-radius: 4px;
+            font-family: inherit;
+        }
+
+        /* Загрузка и карточка обложки */
+        .cover-setup {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .cover-preview {
+            width: 150px;
+            height: 200px;
+            background-color: #111;
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 30px;
+            color: #555;
+            background-size: cover;
+            background-position: center;
+            flex-shrink: 0;
+            cursor: pointer;
+            transition: border-color 0.2s ease, color 0.2s ease;
+        }
+
+        .cover-preview:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .cover-inputs { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 10px; }
+        input[type="file"] { display: none; }
+
+        .file-label-btn {
+            display: inline-block;
+            width: 100%;
+            padding: 12px;
+            background: #2a2a2a;
+            border: 1px solid var(--border);
+            color: var(--text);
+            text-align: center;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        .file-label-btn:hover { background: #333; border-color: var(--accent); }
+
+        /* Сетка превью страниц */
+        .pages-preview-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+            gap: 12px;
+            margin-top: 15px;
+        }
+
+        .page-thumb {
+            aspect-ratio: 3/4;
+            background-size: cover;
+            background-position: center;
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .page-thumb-num {
+            position: absolute;
+            bottom: 4px; left: 4px;
+            background: rgba(0,0,0,0.8);
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+
+        .page-thumb-remove {
+            position: absolute;
+            top: 4px; right: 4px;
+            background: var(--danger);
+            color: #fff;
+            border: none;
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        /* Стиль для выбора жанров */
+        .genres-chips-box {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 6px;
+        }
+
+        .genre-chip {
+            background: #111;
+            border: 1px solid var(--border);
+            color: #888;
+            padding: 8px 14px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            user-select: none;
+            transition: all 0.2s ease;
+        }
+
+        .genre-chip:hover {
+            border-color: #555;
+            color: #fff;
+        }
+
+        .genre-chip.active {
+            background: var(--accent);
+            color: #111;
+            border-color: var(--accent);
+            font-weight: 800;
+        }
+
+        /* Кнопки */
+        .btn-group { display: flex; gap: 15px; margin-top: 20px; }
+
+        .submit-btn {
+            flex: 1;
+            padding: 15px;
+            background: var(--accent);
+            color: #111;
+            border: none;
+            font-weight: 900;
+            text-transform: uppercase;
+            font-size: 15px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .delete-btn {
+            padding: 15px 25px;
+            background: var(--danger);
+            color: #fff;
+            border: none;
+            font-weight: 900;
+            text-transform: uppercase;
+            font-size: 15px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .two-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        
+        .edit-section {
+            border-top: 2px dashed var(--border);
+            padding-top: 20px;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+<!-- Модальное окно авторизации -->
+<div id="auth-overlay" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #121212; z-index: 9999; display: flex; align-items: center; justify-content: center;">
+    <div style="background: #1e1e1e; padding: 30px; border-radius: 8px; border: 2px solid #FFD000; text-align: center; width: 320px;">
+        <h2 style="color: #fff; margin-bottom: 20px;">Вход в админку</h2>
+        <input type="password" id="admin-pass-input" placeholder="Введите пароль..." style="width: 100%; padding: 10px; margin-bottom: 15px; background: #111; border: 1px solid #333; color: #fff; border-radius: 4px;">
+        <button onclick="checkAdminPassword()" style="width: 100%; padding: 12px; background: #FFD000; border: none; font-weight: bold; cursor: pointer; border-radius: 4px;">Войти</button>
+        <p id="auth-error" style="color: #ff4444; margin-top: 10px; font-size: 13px; display: none;">Неверный пароль!</p>
+    </div>
+</div>
+
+<script>
+    const CORRECT_HASH = "e00cf7c8881b044471386f8821d8565e7c591e668cef87bd358730b76afb107c";
+
+    async function hashString(str) {
+        const encoder = new TextEncoder();
+        const data = encoder.encode(str);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    async function checkAdminPassword() {
+        const inputPass = document.getElementById('admin-pass-input').value;
+        const inputHash = await hashString(inputPass);
+
+        if (inputHash === CORRECT_HASH) {
+            sessionStorage.setItem('manga_admin_auth', 'true');
+            document.getElementById('auth-overlay').style.display = 'none';
+        } else {
+            document.getElementById('auth-error').style.display = 'block';
+        }
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+        if (sessionStorage.getItem('manga_admin_auth') === 'true') {
+            document.getElementById('auth-overlay').style.display = 'none';
+        }
+    });
+</script>
+
+<div class="admin-container">
+    <div class="header-center">
+        <h1>Панель управления</h1>
+    </div>
+
+    <!-- Авторизация GitHub -->
+    <div class="settings-box">
+        <div class="form-group" style="margin-bottom: 0; flex: 1;">
+            <label>GitHub Репозиторий:</label>
+            <input type="text" id="repo" placeholder="user/manga-site">
+        </div>
+        <div class="form-group" style="margin-bottom: 0; flex: 1;">
+            <label>GitHub Token:</label>
+            <input type="password" id="token" placeholder="ghp_***">
+        </div>
+    </div>
+
+    <!-- Вкладки -->
+    <div class="tabs">
+        <button class="tab-btn active" data-target="tab-title">Добавить тайтл</button>
+        <button class="tab-btn" data-target="tab-chapter">Добавить главу</button>
+        <button class="tab-btn" data-target="tab-edit" style="color: var(--accent);">✏️ Редактировать</button>
+    </div>
+
+    <!-- ВКЛАДКА 1: ДОБАВИТЬ ТАЙТЛ -->
+    <div id="tab-title" class="tab-content active">
+        <div class="cover-setup">
+            <label for="cover-file-input" class="cover-preview" id="cover-preview-box" title="Нажмите для выбора обложки">+</label>
+            <input type="file" id="cover-file-input" accept="image/*">
+
+            <div class="cover-inputs">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Обложка тайтла</label>
+                    <label for="cover-file-input" class="file-label-btn">📁 Выбрать файл обложки</label>
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Название тайтла (Рус)</label>
+                    <input type="text" id="title-name" placeholder="Человек-Бензопила">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label>Оригинальное название</label>
+                    <input type="text" id="title-orig-name" placeholder="Chainsaw Man / チェンソーマン">
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Описание</label>
+            <textarea id="title-desc" rows="4" placeholder="Синопсис..."></textarea>
+        </div>
+
+        <!-- Поле выбора жанров -->
+        <div class="form-group">
+            <label>Жанры (выберите один или несколько):</label>
+            <div class="genres-chips-box" id="create-genres-box"></div>
+        </div>
+
+        <div class="two-cols">
+            <div class="form-group">
+                <label>Тип тайтла</label>
+                <select id="title-type">
+                    <option value="Манга">Манга (Япония)</option>
+                    <option value="Манхва">Манхва (Корея)</option>
+                    <option value="Маньхуа">Маньхуа (Китай)</option>
+                    <option value="Комикс">Комикс (Запад)</option>
+                    <option value="OEL-Манга">OEL-Манга</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Год выпуска</label>
+                <input type="number" id="title-year" placeholder="2026">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Статус</label>
+            <select id="title-status">
+                <option value="Выпускается">Выпускается</option>
+                <option value="Завершён">Завершён</option>
+                <option value="Заморожен">Заморожен</option>
+                <option value="Брошен">Брошен (Кладбище)</option>
+            </select>
+        </div>
+
+        <button class="submit-btn" id="save-title-btn">Создать тайтл</button>
+    </div>
+
+    <!-- ВКЛАДКА 2: ДОБАВИТЬ ГЛАВУ -->
+    <div id="tab-chapter" class="tab-content">
+        <div class="form-group">
+            <label>Выбрать тайтл</label>
+            <select class="manga-select" id="chapter-manga-select">
+                <option value="">Выберите тайтл из списка...</option>
+            </select>
+        </div>
+
+        <div class="two-cols">
+            <div class="form-group">
+                <label>Номер тома</label>
+                <input type="number" id="chapter-volume" placeholder="1" value="1" min="1">
+            </div>
+            <div class="form-group">
+                <label>Номер/Название главы</label>
+                <input type="text" id="chapter-number" placeholder="1 или 1.5 (название)">
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label>Загрузить страницы главы</label>
+            <label for="pages-file-input" class="file-label-btn" style="border: 2px dashed var(--accent); color: var(--accent);">
+                ➕ Выбрать файлы страниц в проводнике
+            </label>
+            <input type="file" id="pages-file-input" accept="image/*" multiple>
+            
+            <div class="pages-preview-grid" id="pages-preview"></div>
+        </div>
+
+        <button class="submit-btn" id="save-chapter-btn">Опубликовать главу</button>
+    </div>
+
+    <!-- ВКЛАДКА 3: РЕДАКТИРОВАНИЕ ТАЙТЛОВ И ГЛАВ -->
+    <div id="tab-edit" class="tab-content">
+        <div class="form-group">
+            <label>1. Выберите тайтл для редактирования:</label>
+            <select class="manga-select" id="edit-manga-select">
+                <option value="">Выберите тайтл...</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>2. Что редактируем?</label>
+            <select id="edit-mode-select">
+                <option value="title">Информация о тайтле (Название, Описание, Жанры, Статус)</option>
+                <option value="chapter">Конкретную главу</option>
+            </select>
+        </div>
+
+        <div class="form-group" id="edit-chapter-selector-box" style="display: none;">
+            <label>Выберите главу:</label>
+            <select id="edit-chapter-select">
+                <option value="">Выберите главу...</option>
+            </select>
+        </div>
+
+        <!-- Поля редактирования ТАЙТЛА -->
+        <div class="edit-section" id="edit-title-form">
+            <div class="form-group">
+                <label>Изменить название (Рус)</label>
+                <input type="text" id="edit-title-name">
+            </div>
+            <div class="form-group">
+                <label>Изменить оригинальное название</label>
+                <input type="text" id="edit-title-orig-name">
+            </div>
+            <div class="form-group">
+                <label>Изменить описание</label>
+                <textarea id="edit-title-desc" rows="4"></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Изменить жанры:</label>
+                <div class="genres-chips-box" id="edit-genres-box"></div>
+            </div>
+
+            <div class="two-cols">
+                <div class="form-group">
+                    <label>Изменить тип тайтла</label>
+                    <select id="edit-title-type">
+                        <option value="Манга">Манга (Япония)</option>
+                        <option value="Манхва">Манхва (Корея)</option>
+                        <option value="Маньхуа">Маньхуа (Китай)</option>
+                        <option value="Комикс">Комикс (Запад)</option>
+                        <option value="OEL-Манга">OEL-Манга</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Изменить год выпуска</label>
+                    <input type="number" id="edit-title-year" placeholder="2026">
+                </div>
+            </div>
+
+            <div class="two-cols">
+                <div class="form-group">
+                    <label>Изменить статус</label>
+                    <select id="edit-title-status">
+                        <option value="Выпускается">Выпускается</option>
+                        <option value="Завершён">Завершён</option>
+                        <option value="Заморожен">Заморожен</option>
+                        <option value="Брошен">Брошен (Кладбище)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Заменить обложку (опционально)</label>
+                    <label for="edit-cover-input" class="file-label-btn">📁 Выбрать новую обложку</label>
+                    <input type="file" id="edit-cover-input" accept="image/*">
+                </div>
+            </div>
+
+            <div class="btn-group">
+                <button class="submit-btn" id="update-title-btn">Сохранить изменения</button>
+                <button class="delete-btn" id="delete-title-btn" title="Удалить тайтл">Удалить тайтл</button>
+            </div>
+        </div>
+
+        <!-- Поля редактирования ГЛАВЫ -->
+        <div class="edit-section" id="edit-chapter-form" style="display: none;">
+            <div class="two-cols">
+                <div class="form-group">
+                    <label>Изменить номер тома</label>
+                    <input type="number" id="edit-chapter-volume" placeholder="1" min="1">
+                </div>
+                <div class="form-group">
+                    <label>Изменить название/номер главы</label>
+                    <input type="text" id="edit-chapter-name">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Страницы главы</label>
+                <label for="edit-pages-input" class="file-label-btn" style="border: 2px dashed var(--accent); color: var(--accent);">
+                    ➕ Добавить файлы страниц в главу
+                </label>
+                <input type="file" id="edit-pages-input" accept="image/*" multiple>
+                
+                <div class="pages-preview-grid" id="edit-pages-preview"></div>
+            </div>
+
+            <div class="btn-group">
+                <button class="submit-btn" id="update-chapter-btn">Сохранить главу</button>
+                <button class="delete-btn" id="delete-chapter-btn" title="Удалить главу">Удалить главу</button>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const DEFAULT_GENRES = [
+        "Боевик", "Драма", "Исекай", "Комедия", "Музыка", 
+        "Повседневность", "Приключения", "Романтика", "Спорт", 
+        "Ужасы", "Фантастика", "Фэнтези", "Этти"
+    ].sort((a, b) => a.localeCompare(b, 'ru'));
+
+    function initGenreChips(containerId, activeGenres = []) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = '';
+
+        DEFAULT_GENRES.forEach(genre => {
+            const chip = document.createElement('div');
+            chip.className = `genre-chip ${activeGenres.includes(genre) ? 'active' : ''}`;
+            chip.textContent = genre;
+            chip.onclick = () => chip.classList.toggle('active');
+            container.appendChild(chip);
+        });
+    }
+
+    function getSelectedGenres(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return [];
+        const activeChips = container.querySelectorAll('.genre-chip.active');
+        return Array.from(activeChips).map(c => c.textContent);
+    }
+
+    // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ GITHUB ---
+    function getGHCredentials() {
+        const repo = document.getElementById('repo').value.trim();
+        const token = document.getElementById('token').value.trim();
+        if (!repo || !token) {
+            alert("Пожалуйста, заполните GitHub Репозиторий и Token!");
+            return null;
+        }
+        return { repo, token };
+    }
+
+    // Чтение файла в Base64
+    function fileToBase64(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = error => reject(error);
+        });
+    }
+
+    // Функция сжатия и конвертации изображения в WebP
+    function compressImage(file, maxWidth = 1600, quality = 0.82) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > maxWidth) {
+                        height = Math.round((height * maxWidth) / width);
+                        width = maxWidth;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    canvas.toBlob(
+                        (blob) => {
+                            if (blob) {
+                                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".webp", {
+                                    type: 'image/webp',
+                                    lastModified: Date.now()
+                                });
+                                resolve(compressedFile);
+                            } else {
+                                reject(new Error('Ошибка сжатия изображения'));
+                            }
+                        },
+                        'image/webp',
+                        quality
+                    );
+                };
+                img.onerror = (error) => reject(error);
+            };
+            reader.onerror = (error) => reject(error);
+        });
+    }
+
+    // Функция получения файла с GitHub (чтобы узнать SHA перед обновлением)
+    async function getGithubFile(path) {
+        const creds = getGHCredentials();
+        if (!creds) return null;
+
+        const res = await fetch(`https://api.github.com/repos/${creds.repo}/contents/${path}`, {
+            headers: {
+                'Authorization': `token ${creds.token}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        if (res.ok) {
+            return await res.json();
+        }
+        return null;
+    }
+
+    // Функция загрузки/обновления файла в GitHub
+    async function uploadToGithub(path, contentBase64, commitMessage, sha = null) {
+        const creds = getGHCredentials();
+        if (!creds) return null;
+
+        const url = `https://api.github.com/repos/${creds.repo}/contents/${path}`;
+        const body = {
+            message: commitMessage,
+            content: contentBase64
+        };
+        if (sha) body.sha = sha;
+
+        const res = await fetch(url, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${creds.token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(body)
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.message || 'Ошибка загрузки в GitHub');
+        }
+        return await res.json();
+    }
+
+    // Транслитерация наименований в безопасные папки
+    function slugify(text) {
+        return text.toString().toLowerCase()
+            .replace(/\s+/g, '-')
+            .replace(/[^\w\-]+/g, '')
+            .replace(/\-\-+/g, '-')
+            .replace(/^-+/, '')
+            .replace(/-+$/, '') || 'ch-' + Date.now();
+    }
+
+    // --- ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК ---
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            document.getElementById(btn.dataset.target).classList.add('active');
+        });
+    });
+
+    const editModeSelect = document.getElementById('edit-mode-select');
+    const editChapterSelectorBox = document.getElementById('edit-chapter-selector-box');
+    const editTitleForm = document.getElementById('edit-title-form');
+    const editChapterForm = document.getElementById('edit-chapter-form');
+
+    editModeSelect.addEventListener('change', (e) => {
+        if (e.target.value === 'chapter') {
+            editChapterSelectorBox.style.display = 'block';
+            editTitleForm.style.display = 'none';
+            editChapterForm.style.display = 'block';
+        } else {
+            editChapterSelectorBox.style.display = 'none';
+            editTitleForm.style.display = 'block';
+            editChapterForm.style.display = 'none';
+        }
+    });
+
+    // Обработка обложки
+    let selectedCoverFile = null;
+    const coverFileInput = document.getElementById('cover-file-input');
+    const coverPreviewBox = document.getElementById('cover-preview-box');
+
+    coverFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            selectedCoverFile = file;
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                coverPreviewBox.style.backgroundImage = `url('${event.target.result}')`;
+                coverPreviewBox.textContent = '';
+            };
+            reader.readAsDataURL(file);
+        }
+    });
+
+    function renderPagePreviews(files, containerId) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = '';
+
+        files.forEach((file, index) => {
+            const thumb = document.createElement('div');
+            thumb.className = 'page-thumb';
+            
+            const numLabel = document.createElement('span');
+            numLabel.className = 'page-thumb-num';
+            numLabel.textContent = `Стр. ${index + 1}`;
+            thumb.appendChild(numLabel);
+
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'page-thumb-remove';
+            removeBtn.textContent = '✕';
+            removeBtn.onclick = (e) => {
+                e.preventDefault();
+                files.splice(index, 1);
+                renderPagePreviews(files, containerId);
+            };
+            thumb.appendChild(removeBtn);
+
+            if (typeof file === 'string') {
+                thumb.style.backgroundImage = `url('${file}')`;
+            } else {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    thumb.style.backgroundImage = `url('${event.target.result}')`;
+                };
+                reader.readAsDataURL(file);
+            }
+
+            container.appendChild(thumb);
+        });
+    }
+
+    let createPagesFiles = [];
+    let editPagesFiles = [];
+
+    document.getElementById('pages-file-input').addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        createPagesFiles = createPagesFiles.concat(files);
+        renderPagePreviews(createPagesFiles, 'pages-preview');
+    });
+
+    document.getElementById('edit-pages-input').addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        editPagesFiles = editPagesFiles.concat(files);
+        renderPagePreviews(editPagesFiles, 'edit-pages-preview');
+    });
+
+    // --- ЗАГРУЗКА СПИСКА ТАЙТЛОВ ИЗ КОРНЯ РЕПОЗИТОРИЯ ---
+    async function loadMangaList() {
+        const creds = getGHCredentials();
+        const selects = document.querySelectorAll('.manga-select');
+
+        if (!creds) {
+            selects.forEach(select => select.innerHTML = '<option value="">Введите Repo и Token вверху...</option>');
+            return;
+        }
+
+        selects.forEach(select => select.innerHTML = '<option value="">Сканирование репозитория...</option>');
+
+        try {
+            const res = await fetch(`https://api.github.com/repos/${creds.repo}/contents/titles`, {
+                headers: { 
+                    'Authorization': `token ${creds.token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                }
+            });
+
+            if (!res.ok) {
+                if (res.status === 404) {
+                    selects.forEach(select => select.innerHTML = '<option value="">Папка titles не найдена</option>');
+                    return;
+                }
+                throw new Error(`Ошибка API: ${res.status}`);
+            }
+
+            const items = await res.json();
+            const folders = items.filter(item => item.type === 'dir');
+
+            if (folders.length === 0) {
+                selects.forEach(select => select.innerHTML = '<option value="">Тайтлы не найдены</option>');
+                return;
+            }
+
+            const mangaList = [];
+
+            for (const folder of folders) {
+                try {
+                    const jsonRes = await fetch(`https://api.github.com/repos/${creds.repo}/contents/titles/${folder.name}/data.json`, {
+                        headers: { 
+                            'Authorization': `token ${creds.token}`,
+                            'Accept': 'application/vnd.github.v3+json'
+                        }
+                    });
+
+                    if (jsonRes.ok) {
+                        const fileData = await jsonRes.json();
+                        const decodedContent = decodeURIComponent(escape(atob(fileData.content.replace(/\n/g, ''))));
+                        const data = JSON.parse(decodedContent);
+                        mangaList.push(data);
+                    }
+                } catch (e) {
+                    console.error(`Ошибка загрузки data.json для ${folder.name}`, e);
+                }
+            }
+
+            selects.forEach(select => {
+                select.innerHTML = '<option value="">Выберите тайтл из списка...</option>';
+                mangaList.forEach(manga => {
+                    const option = document.createElement('option');
+                    option.value = manga.id;
+                    option.textContent = manga.name;
+                    select.appendChild(option);
+                });
+            });
+
+        } catch (err) {
+            console.error('Ошибка при загрузке тайтлов:', err);
+            selects.forEach(select => {
+                select.innerHTML = `<option value="">Ошибка загрузки</option>`;
+            });
+        }
+    }
+
+    // --- СОЗДАНИЕ ТАЙТЛА В КОРНЕВОЙ ПАПКЕ ---
+    document.getElementById('save-title-btn').addEventListener('click', async () => {
+        const creds = getGHCredentials();
+        if (!creds) return alert("Введите GitHub Репозиторий и Token!");
+
+        const btn = document.getElementById('save-title-btn');
+        const name = document.getElementById('title-name').value.trim();
+        const origName = document.getElementById('title-orig-name').value.trim();
+        const description = document.getElementById('title-desc').value.trim();
+        const genres = getSelectedGenres('create-genres-box');
+        const type = document.getElementById('title-type').value;
+        const year = document.getElementById('title-year').value;
+        const status = document.getElementById('title-status').value;
+
+        if (!name) return alert("Введите название тайтла!");
+        if (!selectedCoverFile) return alert("Выберите файл обложки!");
+
+        btn.disabled = true;
+        btn.textContent = "Загрузка данных...";
+
+        try {
+            const folderSlug = slugify(name);
+            const coverExt = selectedCoverFile.name.split('.').pop();
+            const coverPath = `titles/${folderSlug}/cover.${coverExt}`;
+
+            const coverBase64 = await fileToBase64(selectedCoverFile);
+            await uploadToGithub(coverPath, coverBase64, `Upload cover for ${name}`);
+
+            const titleJson = {
+                id: folderSlug,
+                name,
+                origName,
+                description,
+                genres,
+                type,
+                year,
+                status,
+                cover: coverPath,
+                createdAt: new Date().toISOString()
+            };
+
+            const jsonPath = `titles/${folderSlug}/data.json`;
+            const jsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(titleJson, null, 2))));
+            
+            await uploadToGithub(jsonPath, jsonBase64, `Create title metadata for ${name}`);
+
+            alert(`Тайтл "${name}" успешно создан!`);
+            await loadMangaList();
+
+        } catch (err) {
+            alert("Ошибка при сохранении: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Создать тайтл";
+        }
+    });
+
+    // --- СОЗДАНИЕ ГЛАВЫ В GITHUB ---
+    document.getElementById('save-chapter-btn').addEventListener('click', async () => {
+        const creds = getGHCredentials();
+        if (!creds) return alert("Введите GitHub Репозиторий и Token!");
+
+        const btn = document.getElementById('save-chapter-btn');
+        const mangaSlug = document.getElementById('chapter-manga-select').value;
+        const volumeNum = document.getElementById('chapter-volume').value.trim() || "1";
+        const chapterNum = document.getElementById('chapter-number').value.trim();
+
+        if (!mangaSlug) return alert("Выберите тайтл из списка!");
+        if (!chapterNum) return alert("Введите номер или название главы!");
+        if (createPagesFiles.length === 0) return alert("Выберите хотя бы одну страницу для главы!");
+
+        btn.disabled = true;
+
+        try {
+            const chapterSlug = `vol-${volumeNum}-ch-${slugify(chapterNum)}`;
+            const uploadedPagePaths = [];
+            
+
+            // 1. Сжимаем и загружаем каждую страницу главы на GitHub в формате WebP
+            for (let i = 0; i < createPagesFiles.length; i++) {
+                const file = createPagesFiles[i];
+                
+                btn.textContent = `Сжатие и загрузка ${i + 1} из ${createPagesFiles.length}...`;
+
+                // Сжимаем картинку до макс. ширины 1600px и конвертируем в WebP (качество 82%)
+                const compressedFile = await compressImage(file, 1600, 0.82);
+
+                const pageNum = String(i + 1).padStart(3, '0');
+                const pagePath = `titles/${mangaSlug}/chapters/${chapterSlug}/${pageNum}.webp`;
+
+                const pageBase64 = await fileToBase64(compressedFile);
+                await uploadToGithub(pagePath, pageBase64, `Add WebP page ${i + 1} for ${chapterSlug}`);
+                uploadedPagePaths.push(pagePath);
+            }
+
+            // 2. Создаем или обновляем chapters.json тайтла
+            btn.textContent = "Сохранение метаданных главы...";
+            const chaptersJsonPath = `titles/${mangaSlug}/chapters.json`;
+            
+            let chaptersList = [];
+            let existingSha = null;
+
+            const existingFile = await getGithubFile(chaptersJsonPath);
+            if (existingFile) {
+                existingSha = existingFile.sha;
+                const decodedContent = decodeURIComponent(escape(atob(existingFile.content.replace(/\n/g, ''))));
+                chaptersList = JSON.parse(decodedContent);
+            }
+
+            const newChapterData = {
+                id: chapterSlug,
+                volume: parseInt(volumeNum, 10),
+                number: chapterNum,
+                pagesCount: uploadedPagePaths.length,
+                pages: uploadedPagePaths,
+                createdAt: new Date().toISOString()
+            };
+
+            // Перезаписываем или добавляем новую главу
+            const existingIndex = chaptersList.findIndex(c => c.id === chapterSlug);
+            if (existingIndex !== -1) {
+                chaptersList[existingIndex] = newChapterData;
+            } else {
+                chaptersList.push(newChapterData);
+            }
+
+            // Сортировка глав по тому и номеру
+            chaptersList.sort((a, b) => a.volume - b.volume || parseFloat(a.number) - parseFloat(b.number));
+
+            const jsonBase64 = btoa(unescape(encodeURIComponent(JSON.stringify(chaptersList, null, 2))));
+            await uploadToGithub(chaptersJsonPath, jsonBase64, `Update chapters list for ${mangaSlug}`, existingSha);
+
+            alert(`Глава "${chapterNum}" (Том ${volumeNum}) успешно опубликована!`);
+            createPagesFiles = [];
+            renderPagePreviews(createPagesFiles, 'pages-preview');
+            document.getElementById('chapter-number').value = '';
+
+        } catch (err) {
+            alert("Ошибка публикации главы: " + err.message);
+        } finally {
+            btn.disabled = false;
+            btn.textContent = "Опубликовать главу";
+        }
+    });
+
+    // Заглушки на редактирование/удаление
+    document.getElementById('update-title-btn').addEventListener('click', () => {
+        alert("Изменения отправлены в GitHub!");
+    });
+
+    document.getElementById('delete-title-btn').addEventListener('click', () => {
+        if (confirm("Вы уверены, что хотите удалить этот тайтл из репозитория?")) {
+            alert("Запрос на удаление отправлен.");
+        }
+    });
+
+    document.getElementById('update-chapter-btn').addEventListener('click', () => alert("Глава обновлена!"));
+    document.getElementById('delete-chapter-btn').addEventListener('click', () => confirm("Удалить главу?") && alert("Удалено!"));
+
+    window.addEventListener('DOMContentLoaded', () => {
+        initGenreChips('create-genres-box');
+        initGenreChips('edit-genres-box');
+
+        const savedRepo = localStorage.getItem('manga_repo');
+        const savedToken = localStorage.getItem('manga_token');
+
+        if (savedRepo) document.getElementById('repo').value = savedRepo;
+        if (savedToken) document.getElementById('token').value = savedToken;
+
+        if (savedRepo && savedToken) {
+            loadMangaList();
+        }
+    });
+
+    document.getElementById('repo').addEventListener('input', (e) => {
+        localStorage.setItem('manga_repo', e.target.value.trim());
+    });
+    document.getElementById('token').addEventListener('input', (e) => {
+        localStorage.setItem('manga_token', e.target.value.trim());
+    });
+
+    document.getElementById('repo').addEventListener('change', loadMangaList);
+    document.getElementById('token').addEventListener('change', loadMangaList);
+</script>
+</body>
+</html>

@@ -1,0 +1,237 @@
+/* Цветовая палитра (Светлая тема) */
+:root {
+    --bg-color: #ffffff;
+    --text-color: #111111;
+    --accent-color: #FFDE00; /* Яркий жёлтый */
+    --surface-bg: #f7f7f7;
+    --border-color: #e0e0e0;
+    --card-hover-shadow: #111111;
+}
+
+/* Тёмная тема */
+body.dark-theme {
+    --bg-color: #121212;
+    --text-color: #f0f0f0;
+    --accent-color: #FFD000;
+    --surface-bg: #1e1e1e;
+    --border-color: #333333;
+    --card-hover-shadow: #FFD000;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    height: 100%; /* Нужно для прижатия футера к низу */
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    transition: background-color 0.3s ease, color 0.3s ease;
+    display: flex;
+    flex-direction: column; /* Вертикальная структура */
+}
+
+/* --- ШАПКА (HEADER) --- */
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 40px;
+    background-color: var(--surface-bg);
+    border-bottom: 2px solid var(--border-color);
+}
+
+.logo-container {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    cursor: pointer;
+}
+
+.logo-container img {
+    width: 60px;
+    height: 60px; 
+    object-fit: cover;
+    border-radius: 12px;
+}
+
+.logo-container h1 {
+    font-size: 24px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+}
+
+/* Кнопка смены темы (Иконка) */
+.theme-toggle {
+    background-color: transparent;
+    color: var(--text-color);
+    border: 2px solid var(--border-color);
+    width: 46px;
+    height: 46px;
+    cursor: pointer;
+    font-size: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+}
+
+.theme-toggle:hover {
+    background-color: var(--accent-color);
+    border-color: var(--accent-color);
+    color: #111;
+    transform: scale(1.05);
+}
+
+/* --- ОСНОВНОЙ КОНТЕНТ (MAIN) --- */
+main {
+    flex: 1; /* Растягиваем main, чтобы оттолкнуть футер вниз */
+    padding: 40px;
+    max-width: 1300px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+section {
+    margin-bottom: 60px;
+}
+
+h2 {
+    font-size: 28px;
+    text-transform: uppercase;
+    font-weight: 800;
+    display: inline-block;
+    margin-bottom: 25px;
+    position: relative;
+    z-index: 1;
+}
+
+/* Жёлтое выделение заголовков */
+h2::after {
+    content: '';
+    position: absolute;
+    left: -5px;
+    bottom: 3px;
+    width: 100%;
+    height: 12px;
+    background-color: var(--accent-color);
+    z-index: -1;
+    padding-right: 10px;
+}
+
+/* Сетка карточек */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 25px;
+}
+
+.card {
+    background-color: var(--surface-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 16px; /* Увеличено скругление карточки */
+    padding: 15px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+/* Анимация при наведении (стиль комиксов) */
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 6px 6px 0px var(--card-hover-shadow);
+    border-color: var(--text-color);
+}
+
+/* Заглушка для обложки манги (пропорции 3:4) */
+.card-cover {
+    width: 100%;
+    aspect-ratio: 2.85/4;
+    background-color: var(--border-color);
+    margin-bottom: 15px;
+    border-radius: 12px; /* Увеличено скругление обложки */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--text-color);
+    opacity: 1;
+    background-size: contain; 
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.card-chapter {
+    font-size: 14px;
+    color: var(--accent-color);
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* --- ПОДВАЛ (FOOTER) --- */
+footer {
+    background-color: var(--surface-bg);
+    border-top: 2px solid var(--border-color);
+    padding: 30px 40px;
+    text-align: center;
+}
+
+.footer-nav {
+    display: flex;
+    justify-content: center;
+    gap: 30px;
+    margin-bottom: 15px;
+}
+
+.footer-nav a {
+    color: var(--text-color);
+    text-decoration: none;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 14px;
+    transition: color 0.2s ease;
+}
+
+.footer-nav a:hover {
+    color: var(--accent-color);
+}
+
+.footer-copyright {
+    font-size: 12px;
+    opacity: 0.6;
+}
+
+/* Фиксируем недавние главы строго в один ряд */
+#recent .grid {
+    display: flex;
+    flex-wrap: nowrap; /* Не дает карточкам переноситься на вторую строку */
+    overflow: hidden; /* Скрывает всё, что не влезло */
+    gap: 15px;
+}
+
+#recent .grid .card {
+    flex: 1 0 180px; /* Фиксированная или адаптивная ширина карточки */
+    max-width: 220px;
+}
+
+/* Адаптивность для мобильных устройств */
+@media (max-width: 600px) {
+    header { padding: 15px 20px; }
+    main { padding: 20px; }
+    .logo-container h1 { font-size: 20px; }
+    .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+    .footer-nav { flex-direction: column; gap: 15px; }
+}
