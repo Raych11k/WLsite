@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WL Читалка</title>
+    <link rel="icon" href="data/icon.png" type="изображение/формат">
+    <link rel="stylesheet" href="styles/main_page.css">
+</head>
+<body>
+
+    <header>
+        <div class="logo-container">
+            <img src="data/team-logo.png" alt="Лого">
+            <h1>WhiteLight</h1>
+        </div>
+        <button class="theme-toggle" id="theme-btn">Тёмная тема</button>
+    </header>
+
+    <main>
+        <section id="recent">
+            <h2>Недавние главы</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Название манги</div>
+                    <div class="card-chapter">Глава 42</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Крутой комикс</div>
+                    <div class="card-chapter">Глава 15</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Герой меча</div>
+                    <div class="card-chapter">Глава 128</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Повседневность</div>
+                    <div class="card-chapter">Глава 5</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="all-projects">
+            <h2>Все проекты</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Манга А</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Манга Б</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Манга В</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="graveyard">
+            <h2>Кладбище "брошенных"</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Старый проект</div>
+                    <div class="card-chapter">Заброшено</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <nav class="footer-nav">
+            <a href="#about">О нас</a>
+            <a href="#socials">Соц.сети</a>
+            <a href="#faq">FAQ</a>
+        </nav>
+        <div class="footer-copyright">
+            &copy; 2026 WhiteLight. Все права защищены.
+        </div>
+    </footer>
+
+    <script>
+        const themeBtn = document.getElementById('theme-btn');
+        const body = document.body;
+
+        themeBtn.addEventListener('click', () => {
+            body.classList.toggle('dark-theme');
+            
+            if (body.classList.contains('dark-theme')) {
+                themeBtn.textContent = 'Светлая тема';
+                /* Небольшой фикс: в тёмной теме инвертируем кнопку для контраста */
+                themeBtn.style.backgroundColor = 'var(--accent-color)';
+                themeBtn.style.color = '#111';
+            } else {
+                themeBtn.textContent = 'Тёмная тема';
+                themeBtn.style.backgroundColor = 'transparent';
+                themeBtn.style.color = 'var(--text-color)';
+            }
+        });
+    </script>
+</body>
+</html>
