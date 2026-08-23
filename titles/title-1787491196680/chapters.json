@@ -10,5 +10,18 @@
       "titles/title-1787491196680/chapters/vol-1-ch-45/003.webp"
     ],
     "createdAt": "2026-08-23T17:41:31.516Z"
+  },
+  {
+    "id": "vol-1-ch-55",
+    "volume": 1,
+    "number": "5.5",
+    "pagesCount": 4,
+    "pages": [
+      "titles/title-1787491196680/chapters/vol-1-ch-55/001.webp",
+      "titles/title-1787491196680/chapters/vol-1-ch-55/002.webp",
+      "titles/title-1787491196680/chapters/vol-1-ch-55/003.webp",
+      "titles/title-1787491196680/chapters/vol-1-ch-55/004.webp"
+    ],
+    "createdAt": "2026-08-23T20:23:44.747Z"
   }
 ]
