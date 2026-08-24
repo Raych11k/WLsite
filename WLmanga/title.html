@@ -17,9 +17,9 @@
 <body>
 
     <header>
-        <div class="logo-container" onclick="window.location.href='main.html'" style="cursor: pointer;">
+        <div class="logo-container" onclick="window.location.href='main.html'">
             <img src="data/team-logo.png" alt="Лого">
-            <h1>WhiteLight</h1>
+            <span class="logo-text">WhiteLight</span>
         </div>
         <button class="theme-toggle" id="theme-btn" title="Сменить тему">🌙</button>
     </header>
@@ -212,9 +212,9 @@
 
     // Функция для расчёта огоньков на основе просмотров
     function getFlameRating(views) {
-        if (views >= 50) return '🔥🔥🔥';
-        if (views >= 30) return '🔥🔥';
-        if (views >= 5) return '🔥';
+        if (views >= 500) return '🔥🔥🔥';
+        if (views >= 100) return '🔥🔥';
+        if (views >= 30) return '🔥';
         return '—';
     }
 

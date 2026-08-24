@@ -16,13 +16,23 @@
 <body>
 
     <header>
-        <div class="logo-container">
+        <div class="logo-container" onclick="window.location.href='main.html'">
             <img src="data/team-logo.png" alt="Лого">
-            <h1>WhiteLight</h1>
+            <span class="logo-text">WhiteLight</span>
         </div>
-        <button class="theme-toggle" id="theme-btn" title="Сменить тему">🌙</button>
-    </header>
 
+        <div class="header-actions">
+            <button id="like-btn" class="like-btn" title="Поддержать проект">
+                <svg class="heart-icon" viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span id="like-count">0 лайков</span>
+            </button>
+
+            <button class="theme-toggle" id="theme-btn" title="Сменить тему">🌙</button>
+        </div>
+    </header>
+    
     <main>
         <section id="recent">
             <h2>Недавние главы</h2>
@@ -51,7 +61,7 @@
         </section>
 
         <section id="all-projects">
-            <h2>Все проекты</h2>
+            <h2>Все тайтлы</h2>
             <div class="grid">
                 <div class="card">
                     <div class="card-cover">Обложка</div>
@@ -59,11 +69,11 @@
                 </div>
                 <div class="card">
                     <div class="card-cover">Обложка</div>
-                    <div class="card-title">Манга Б</div>
+                    <div class="card-title">Манга И</div>
                 </div>
                 <div class="card">
                     <div class="card-cover">Обложка</div>
-                    <div class="card-title">Манга В</div>
+                    <div class="card-title">Манга Б</div>
                 </div>
             </div>
         </section>
@@ -82,9 +92,9 @@
 
     <footer>
         <nav class="footer-nav">
-            <a href="#about">О нас</a>
-            <a href="#socials">Соц.сети</a>
-            <a href="#faq">FAQ</a>
+            <a href="about.html">О нас</a>
+            <a href="socials.html">Соц.сети</a>
+            <a href="faq.html">FAQ</a>
         </nav>
         <div class="footer-copyright">
             &copy; 2026 WhiteLight. Все права защищены.
@@ -172,7 +182,7 @@
         }
     }
 
-    // Отрисовка недавних глав (строго в 1 строку)
+    // Отрисовка недавних глав
     function renderRecentChapters(chapters) {
         const container = document.querySelector('#recent .grid');
         if (!container) return;
@@ -185,8 +195,8 @@
         // Сортируем по дате публикации (свежие вверху)
         chapters.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-        // Рассчитываем, сколько карточек поместится в 1 строку (максимум 5 штук)
-        const limit = Math.min(chapters.length, 5); 
+        // Ограничение с запасом, чтобы заполнить широкий ряд
+        const limit = Math.min(chapters.length, 12); 
         const recentList = chapters.slice(0, limit);
 
         container.innerHTML = '';
@@ -197,7 +207,6 @@
 
             const coverUrl = `https://raw.githubusercontent.com/${REPO_NAME}/main/${ch.cover}`;
 
-            
             card.innerHTML = `
                 <div class="card-cover" style="background-image: url('${coverUrl}'); background-size: cover; background-position: center;"></div>
                 <div class="card-title">${ch.mangaName}</div>
@@ -244,6 +253,71 @@
             }
         });
     }
+
+    const NAMESPACE = 'whitelight-site.github.io';
+    const LIKE_KEY = 'site_total_likes';
+
+    function getLikePlural(count) {
+        const mod10 = count % 10;
+        const mod100 = count % 100;
+
+        if (mod100 >= 11 && mod100 <= 19) {
+            return `${count} лайков`;
+        }
+        if (mod10 === 1) {
+            return `${count} лайк`;
+        }
+        if (mod10 >= 2 && mod10 <= 4) {
+            return `${count} лайка`;
+        }
+        return `${count} лайков`;
+    }
+
+    async function initLikes() {
+        const likeBtn = document.getElementById('like-btn');
+        const likeCountEl = document.getElementById('like-count');
+
+        if (!likeBtn || !likeCountEl) return;
+
+        let currentLikes = 0;
+
+        if (localStorage.getItem('wl_site_liked') === 'true') {
+            likeBtn.classList.add('liked');
+        }
+
+        try {
+            const res = await fetch(`https://abacus.jasoncameron.dev/get/${NAMESPACE}/${LIKE_KEY}`);
+            if (res.ok) {
+                const data = await res.json();
+                currentLikes = data.value || 0;
+                likeCountEl.textContent = getLikePlural(currentLikes);
+            }
+        } catch (e) {
+            console.error('Ошибка получения лайков:', e);
+        }
+
+        likeBtn.addEventListener('click', async () => {
+            if (!likeBtn.classList.contains('liked')) {
+                likeBtn.classList.add('liked');
+                localStorage.setItem('wl_site_liked', 'true');
+
+                currentLikes++;
+                likeCountEl.textContent = getLikePlural(currentLikes);
+
+                try {
+                    await fetch(`https://abacus.jasoncameron.dev/hit/${NAMESPACE}/${LIKE_KEY}`);
+                } catch (e) {
+                    console.error('Ошибка отправки лайка:', e);
+                }
+            }
+        });
+    }
+
+    // Запуск инициализации при загрузке страницы
+    window.addEventListener('DOMContentLoaded', () => {
+        loadMainPage();
+        initLikes();
+    });
 
     window.addEventListener('DOMContentLoaded', loadMainPage);
     </script>

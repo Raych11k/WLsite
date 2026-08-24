@@ -15,7 +15,7 @@
 <body>
 
     <header>
-        <button class="back-btn" onclick="history.back()">← Назад</button>
+        <button class="back-btn" onclick="history.back()">Назад</button>
         
         <div class="chapter-navigation">
             <button class="chapter-nav-btn" id="prev-chapter-btn" title="Предыдущая глава">◄</button>
@@ -27,8 +27,6 @@
     </header>
 
     <main>
-        <div id="page-counter">Страница <span id="current-page-num">1</span> из <span id="total-pages-num">1</span></div>
-        
         <div id="reader-container" class="vertical-mode fit-width">
             <div class="nav-zone prev" id="nav-prev" title="Предыдущая страница"></div>
             <div class="nav-zone next" id="nav-next" title="Следующая страница"></div>
@@ -146,29 +144,16 @@
             });
         });
 
+        // Переключение страниц в горизонтальном режиме
         function updateHorizontalView() {
-            const pages = pagesWrapper.querySelectorAll('.manga-page');
-            pages.forEach((page, index) => {
-                page.classList.toggle('active', index === currentPageIndex);
+            const pageWrappers = pagesWrapper.querySelectorAll('.manga-page-wrapper');
+            pageWrappers.forEach((wrapper, index) => {
+                wrapper.classList.toggle('active', index === currentPageIndex);
             });
-            currentPageNum.textContent = currentPageIndex + 1;
             window.scrollTo(0, 0);
         }
 
-        navNext.addEventListener('click', () => {
-            if (isHorizontal && currentPageIndex < totalPages - 1) {
-                currentPageIndex++;
-                updateHorizontalView();
-            }
-        });
-
-        navPrev.addEventListener('click', () => {
-            if (isHorizontal && currentPageIndex > 0) {
-                currentPageIndex--;
-                updateHorizontalView();
-            }
-        });
-
+        // Загрузка глав и создание обертки с плашкой номера
         async function loadReader() {
             if (!titleId || !chapterId) {
                 chapterTitleEl.textContent = 'Ошибка: Глава не найдена';
@@ -209,14 +194,24 @@
                 pagesWrapper.innerHTML = '';
                 const pagesList = currentChapter.pages || [];
                 totalPages = pagesList.length;
-                totalPagesNum.textContent = totalPages;
 
+                // Создаем контейнер для каждой страницы + бейдж номера
                 pagesList.forEach((pagePath, index) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'manga-page-wrapper';
+                    if (index === 0) wrapper.classList.add('active');
+
                     const img = document.createElement('img');
                     img.src = `https://raw.githubusercontent.com/${REPO_NAME}/main/${pagePath}`;
                     img.className = 'manga-page';
-                    if (index === 0) img.classList.add('active');
-                    pagesWrapper.appendChild(img);
+
+                    const badge = document.createElement('div');
+                    badge.className = 'page-number-badge';
+                    badge.textContent = `${index + 1} / ${totalPages}`; // Формат: "1 / 9"
+
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(badge);
+                    pagesWrapper.appendChild(wrapper);
                 });
 
                 if (isHorizontal) {
@@ -228,6 +223,39 @@
                 chapterTitleEl.textContent = 'Ошибка сети';
             }
         }
+
+        navNext.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isHorizontal && currentPageIndex < totalPages - 1) {
+                currentPageIndex++;
+                updateHorizontalView();
+            }
+        });
+
+        navPrev.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isHorizontal && currentPageIndex > 0) {
+                currentPageIndex--;
+                updateHorizontalView();
+            }
+        });
+
+        // Переключение стрелками на клавиатуре
+        window.addEventListener('keydown', (e) => {
+            if (!isHorizontal) return;
+            
+            if (e.key === 'ArrowRight' || e.key === 'KeyD') {
+                if (currentPageIndex < totalPages - 1) {
+                    currentPageIndex++;
+                    updateHorizontalView();
+                }
+            } else if (e.key === 'ArrowLeft' || e.key === 'KeyA') {
+                if (currentPageIndex > 0) {
+                    currentPageIndex--;
+                    updateHorizontalView();
+                }
+            }
+        });
 
         window.addEventListener('DOMContentLoaded', loadReader);
     </script>

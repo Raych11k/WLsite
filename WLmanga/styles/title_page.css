@@ -30,6 +30,11 @@
 
 /* --- СТРУКТУРА --- */
 
+.logo-container {
+    cursor: pointer;
+    user-select: none;
+}
+
 .title-container {
     display: flex;
     gap: 40px;
@@ -310,6 +315,7 @@
 @keyframes spin {
     to { transform: rotate(360deg); }
 }
+
 
 .error-msg {
     text-align: center;

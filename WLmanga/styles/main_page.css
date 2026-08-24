@@ -1,18 +1,30 @@
 /* Цветовая палитра (Светлая тема) */
 :root {
-    --bg-color: #ffffff;
-    --text-color: #111111;
-    --surface-bg: #f7f7f7;
-    --border-color: #e0e0e0;
+    --bg-color: #f4f5f7;
+    --card-bg: #ffffff;
+    --text-color: #1a1a1a;
+    --subtext-color: #666666;
+    --header-bg: #ffffff;
+    --border-color: #e1e4e8;
     --card-hover-shadow: #111111;
 }
 
+@font-face {
+    font-family: '5KASANSDESIGN';
+    src: url('../fonts/5KASANSDESIGN.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
 /* Тёмная тема */
-.dark-theme {
-    --bg-color: #121212;
-    --text-color: #f0f0f0;
-    --surface-bg: #1e1e1e;
-    --border-color: #333333;
+html.dark-theme {
+    --bg-color: #121213;
+    --card-bg: #1e1e20;
+    --text-color: #e4e4e7;
+    --subtext-color: #a1a1aa;
+    --header-bg: #18181b;
+    --border-color: #27272a;
     --card-hover-shadow: #FFD000;
 }
 
@@ -28,26 +40,27 @@ html.dark-theme header {
 }
 
 html, body {
-    height: 100%; /* Нужно для прижатия футера к низу */
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden; /* Жестко запрещает странице прокручиваться вбок */
 }
 
 body {
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: var(--bg-color);
     color: var(--text-color);
-    transition: background-color 0.3s ease, color 0.3s ease;
-    display: flex;
-    flex-direction: column; /* Вертикальная структура */
+    font-family: '5KASANSDESIGN', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    transition: background-color 0.3s, color 0.3s;
 }
 
 /* --- ШАПКА (HEADER) --- */
 header {
-    position: fixed;
+    position: sticky;
     top: 0;
     left: 0;
     width: 100%;
     height: 60px;
-    z-index: 1000;
+    z-index: 100;
     background: rgba(255, 255, 255, 0.85);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
@@ -61,12 +74,52 @@ header {
     transition: background 0.3s ease, border-color 0.3s ease;
 }
 
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.like-btn {
+    background: var(--tag-bg, rgba(255, 255, 255, 0.08));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 20px;
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--text-primary); /* Цвет меняется в зависимости от темы сайта */
+    font-size: 13px;
+    font-weight: 600;
+    transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.like-btn:hover {
+    transform: scale(1.05);
+}
+
+.heart-icon {
+    width: 16px;
+    height: 16px;
+    fill: var(--text-muted, #8e8e9e);
+    transition: fill 0.25s ease, transform 0.25s ease;
+}
+
+.like-btn.liked .heart-icon {
+    fill: #ff2d55;
+    transform: scale(1.15);
+}
+
+.like-btn.liked {
+    border-color: rgba(255, 45, 85, 0.4);
+    background: rgba(255, 45, 85, 0.1);
+}
+
 .logo-container {
     display: flex;
     align-items: center;
-    position: relative;
-    height: 100%;
-    cursor: pointer;
+    gap: 8px;
 }
 
 .logo-container img {
@@ -77,14 +130,18 @@ header {
     top: 15px;
     margin-right: -10px;
     flex-shrink: 0;
-    z-index: 2;
 }
 
-.logo-container h1 {
+.logo-text {
+    position: absolute;
+    left: 150px;
+    top: 50%;
+    transform: translateY(-50%);
+    
     font-size: 22px;
+    font-weight: 800;
     text-transform: uppercase;
-    margin: 0;
-    line-height: 1;
+    color: var(--text-color);
     z-index: 1;
 }
 
@@ -195,8 +252,19 @@ h2::after {
 
 .card-title {
     font-size: 18px;
-    font-weight: bold;
-    margin-bottom: 5px;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-bottom: 6px;
+
+    /* Жесткая связка для clamp */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    
+    /* Дополнительные параметры, чтобы браузер не игнорировал обрезку */
+    text-overflow: ellipsis;
+    word-break: break-word;
 }
 
 .card-chapter {
@@ -212,17 +280,18 @@ h2::after {
 
 /* --- ПОДВАЛ (FOOTER) --- */
 footer {
-    background-color: var(--surface-bg);
-    border-top: 2px solid var(--border-color);
-    padding: 30px 40px;
+    background-color: var(--header-bg);
+    border-top: 1px solid var(--border-color);
+    padding: 24px 16px;
     text-align: center;
+    margin-top: auto;
 }
 
 .footer-nav {
     display: flex;
     justify-content: center;
-    gap: 30px;
-    margin-bottom: 15px;
+    gap: 20px;
+    margin-bottom: 12px;
 }
 
 .footer-nav a {
@@ -239,8 +308,8 @@ footer {
 }
 
 .footer-copyright {
-    font-size: 12px;
-    opacity: 0.6;
+    font-size: 0.8rem;
+    color: var(--subtext-color);
 }
 
 /* Фиксируем недавние главы строго в один ряд */
@@ -256,11 +325,57 @@ footer {
     max-width: 220px;
 }
 
-/* Адаптивность для мобильных устройств */
-@media (max-width: 600px) {
-    header { padding: 15px 20px; }
-    main { padding: 20px; }
-    .logo-container h1 { font-size: 20px; }
-    .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
-    .footer-nav { flex-direction: column; gap: 15px; }
+@media (max-width: 1024px) {
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 12px;
+    }
+}
+
+/* Мобильные устройства (до 768px) */
+@media (max-width: 768px) {
+    header {
+        padding: 10px 16px;
+    }
+
+    main {
+        padding: 16px 12px;
+    }
+
+    section {
+        margin-bottom: 28px;
+    }
+
+    section h2 {
+        font-size: 1.2rem;
+    }
+
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 10px;
+    }
+
+    .card-title {
+        font-size: 0.85rem;
+        padding: 6px 8px 2px;
+    }
+
+    .card-chapter {
+        padding: 0 8px 8px;
+        font-size: 0.75rem;
+    }
+}
+
+/* Маленькие телефоны (до 480px) */
+@media (max-width: 480px) {
+    .grid {
+        /* Закрепляем ровно 2 карточки на самых узких экранах */
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .footer-nav {
+        gap: 12px;
+        flex-wrap: wrap;
+    }
 }
