@@ -1,0 +1,381 @@
+/* Цветовая палитра (Светлая тема) */
+:root {
+    --bg-color: #f4f5f7;
+    --card-bg: #ffffff;
+    --text-color: #1a1a1a;
+    --subtext-color: #666666;
+    --header-bg: #ffffff;
+    --border-color: #e1e4e8;
+    --card-hover-shadow: #111111;
+}
+
+@font-face {
+    font-family: '5KASANSDESIGN';
+    src: url('../fonts/5KASANSDESIGN.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+/* Тёмная тема */
+html.dark-theme {
+    --bg-color: #121213;
+    --card-bg: #1e1e20;
+    --text-color: #e4e4e7;
+    --subtext-color: #a1a1aa;
+    --header-bg: #18181b;
+    --border-color: #27272a;
+    --card-hover-shadow: #FFD000;
+}
+
+html.dark-theme header {
+    background: rgba(20, 20, 20, 0.85); /* Тёмный фон */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1); /* Темная граница */
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+html, body {
+    width: 100%;
+    max-width: 100vw;
+    overflow-x: hidden; /* Жестко запрещает странице прокручиваться вбок */
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--text-color);
+    font-family: '5KASANSDESIGN', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    transition: background-color 0.3s, color 0.3s;
+}
+
+/* --- ШАПКА (HEADER) --- */
+header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 60px;
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 24px;
+    box-sizing: border-box;
+    overflow: hidden;
+    transition: background 0.3s ease, border-color 0.3s ease;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.like-btn {
+    background: var(--tag-bg, rgba(255, 255, 255, 0.08));
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.12));
+    border-radius: 20px;
+    padding: 6px 14px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    color: var(--text-primary); /* Цвет меняется в зависимости от темы сайта */
+    font-size: 13px;
+    font-weight: 600;
+    transition: transform 0.2s ease, background 0.2s ease, border-color 0.2s ease;
+}
+
+.like-btn:hover {
+    transform: scale(1.05);
+}
+
+.heart-icon {
+    width: 16px;
+    height: 16px;
+    fill: var(--text-muted, #8e8e9e);
+    transition: fill 0.25s ease, transform 0.25s ease;
+}
+
+.like-btn.liked .heart-icon {
+    fill: #ff2d55;
+    transform: scale(1.15);
+}
+
+.like-btn.liked {
+    border-color: rgba(255, 45, 85, 0.4);
+    background: rgba(255, 45, 85, 0.1);
+}
+
+.logo-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.logo-container img {
+    height: 200px;
+    width: auto;
+    object-fit: contain;
+    position: relative;
+    top: 15px;
+    margin-right: -10px;
+    flex-shrink: 0;
+}
+
+.logo-text {
+    position: absolute;
+    left: 150px;
+    top: 50%;
+    transform: translateY(-50%);
+    
+    font-size: 22px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--text-color);
+    z-index: 1;
+}
+
+/* Кнопка смены темы (Иконка) */
+.theme-toggle {
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.2);
+    border-radius: 50%;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 18px;
+    transition: all 0.2s ease;
+    filter: grayscale(100%);
+    opacity: 0.8;
+}
+
+html.dark-theme .theme-toggle {
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.theme-toggle:hover {
+    filter: grayscale(100%) brightness(1.3);
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+/* --- ОСНОВНОЙ КОНТЕНТ (MAIN) --- */
+main {
+    flex: 1; /* Растягиваем main, чтобы оттолкнуть футер вниз */
+    padding: 40px;
+    padding-top: 80px;
+    max-width: 1300px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+section {
+    margin-bottom: 60px;
+}
+
+h2 {
+    font-size: 28px;
+    text-transform: uppercase;
+    font-weight: 800;
+    display: inline-block;
+    margin-bottom: 25px;
+    position: relative;
+    z-index: 1;
+}
+
+/* Жёлтое выделение заголовков */
+h2::after {
+    content: '';
+    position: absolute;
+    left: -5px;
+    bottom: 3px;
+    width: 100%;
+    height: 12px;
+    background-color: var(--accent-color);
+    z-index: -1;
+    padding-right: 10px;
+}
+
+/* Сетка карточек */
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 25px;
+}
+
+.card {
+    background-color: var(--surface-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 16px; /* Увеличено скругление карточки */
+    padding: 15px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+/* Анимация при наведении (стиль комиксов) */
+.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 6px 6px 0px var(--card-hover-shadow);
+    border-color: var(--text-color);
+}
+
+/* Заглушка для обложки манги (пропорции 3:4) */
+.card-cover {
+    width: 100%;
+    aspect-ratio: 2.85/4;
+    background-color: var(--border-color);
+    margin-bottom: 15px;
+    border-radius: 12px; /* Увеличено скругление обложки */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    color: var(--text-color);
+    opacity: 1;
+    background-size: contain; 
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.card-title {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1.25;
+    margin-bottom: 6px;
+
+    /* Жесткая связка для clamp */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+    
+    /* Дополнительные параметры, чтобы браузер не игнорировал обрезку */
+    text-overflow: ellipsis;
+    word-break: break-word;
+}
+
+.card-chapter {
+    font-size: 14px;
+    color: var(--accent-color);
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.highlight-chapter {
+    color: #ffcc00;
+}
+
+/* --- ПОДВАЛ (FOOTER) --- */
+footer {
+    background-color: var(--header-bg);
+    border-top: 1px solid var(--border-color);
+    padding: 24px 16px;
+    text-align: center;
+    margin-top: auto;
+}
+
+.footer-nav {
+    display: flex;
+    justify-content: center;
+    gap: 20px;
+    margin-bottom: 12px;
+}
+
+.footer-nav a {
+    color: var(--text-color);
+    text-decoration: none;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 14px;
+    transition: color 0.2s ease;
+}
+
+.footer-nav a:hover {
+    color: var(--accent-color);
+}
+
+.footer-copyright {
+    font-size: 0.8rem;
+    color: var(--subtext-color);
+}
+
+/* Фиксируем недавние главы строго в один ряд */
+#recent .grid {
+    display: flex;
+    flex-wrap: nowrap; /* Не дает карточкам переноситься на вторую строку */
+    overflow: hidden; /* Скрывает всё, что не влезло */
+    gap: 15px;
+}
+
+#recent .grid .card {
+    flex: 1 0 180px; /* Фиксированная или адаптивная ширина карточки */
+    max-width: 220px;
+}
+
+@media (max-width: 1024px) {
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 12px;
+    }
+}
+
+/* Мобильные устройства (до 768px) */
+@media (max-width: 768px) {
+    header {
+        padding: 10px 16px;
+    }
+
+    main {
+        padding: 16px 12px;
+    }
+
+    section {
+        margin-bottom: 28px;
+    }
+
+    section h2 {
+        font-size: 1.2rem;
+    }
+
+    .grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 10px;
+    }
+
+    .card-title {
+        font-size: 0.85rem;
+        padding: 6px 8px 2px;
+    }
+
+    .card-chapter {
+        padding: 0 8px 8px;
+        font-size: 0.75rem;
+    }
+}
+
+/* Маленькие телефоны (до 480px) */
+@media (max-width: 480px) {
+    .grid {
+        /* Закрепляем ровно 2 карточки на самых узких экранах */
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .footer-nav {
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+}
