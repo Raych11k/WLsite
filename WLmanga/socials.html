@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Социальные сети | WhiteLight</title>
+    <link rel="icon" href="data/icon.png" type="image/x-icon">
+    <link rel="stylesheet" href="styles/main_page.css">
+    <link rel="stylesheet" href="styles/socials_page.css">
+    <script>
+    if (localStorage.getItem('wl_theme') === 'dark') {
+        document.documentElement.classList.add('dark-theme');
+    }
+    </script>
+</head>
+<body>
+
+    <header>
+        <div class="logo-container" onclick="window.location.href='main.html'">
+            <img src="data/team-logo.png" alt="Лого">
+            <span class="logo-text">WhiteLight</span>
+        </div>
+
+        <div class="header-actions">
+            <button class="theme-toggle" id="theme-btn" title="Сменить тему">🌙</button>
+        </div>
+    </header>
+
+    <main class="socials-main">
+        <div class="socials-title">
+            <h2>Мы в соц. сетях</h2>
+        </div>
+
+        <!-- Контейнер с треугольным расположением элементов -->
+        <div class="triangle-container">
+            <!-- ВЕРШИНА ТРЕУГОЛЬНИКА: Telegram -->
+            <div class="triangle-top">
+                <a href="https://t.me/karmatranslate8" target="_blank" rel="noopener noreferrer" class="social-link telegram" title="Telegram">
+                    <div class="social-icon-wrapper">
+                        <!-- Иконка Telegram -->
+                        <img src="data/TG.png" alt="Telegram" style="width: 70px; height: 70px; object-fit: contain;">
+                    </div>
+                    <span class="social-label">Telegram</span>
+                </a>
+            </div>
+
+            <!-- ОСНОВАНИЕ ТРЕУГОЛЬНИКА: Boosty и MangaLib -->
+            <div class="triangle-bottom">
+                <!-- Левый угол: Boosty -->
+                <a href="https://boosty.to/karmatranslate8" target="_blank" rel="noopener noreferrer" class="social-link boosty" title="Boosty">
+                    <div class="social-icon-wrapper">
+                        <!-- Иконка Boosty -->
+                        <img src="data/BOOSTY.png" alt="Boosty" style="width: 70px; height: 70px; object-fit: contain;">
+                    </div>
+                    <span class="social-label">Boosty</span>
+                </a>
+
+                <!-- Правый угол: MangaLib -->
+                <a href="https://mangalib.me/ru/team/39655--whitelight" target="_blank" rel="noopener noreferrer" class="social-link mangalib" title="MangaLib">
+                    <div class="social-icon-wrapper">
+                        <!-- Иконка MangaLib -->
+                        <img src="https://static.rustore.ru/imgproxy/_8ypWpuzBPq7cF3jlZ01m5LCxlTgaYEa9EZB22TScc4/preset:vk_og_img/plain/https://static.rustore.ru/apk/2063541439/content/ICON/6fc5feaf-001c-41ab-ad45-fdfb43ffc53d.jpg@webp" alt="MangaLib" style="width: 70px; height: 70px; object-fit: contain;">
+                    </div>
+                    <span class="social-label">MangaLib</span>
+                </a>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <nav class="footer-nav">
+            <a>О нас</a>
+            <a href="socials.html">Соц.сети</a>
+            <a href="faq.html">FAQ</a>
+        </nav>
+        <div class="footer-copyright">
+            &copy; 2026 WhiteLight. Все права защищены.
+        </div>
+    </footer>
+
+    <script>
+    const themeBtn = document.getElementById('theme-btn');
+    const rootElement = document.documentElement;
+
+    if (rootElement.classList.contains('dark-theme')) {
+        if (themeBtn) themeBtn.textContent = '☀️';
+    } else {
+        if (themeBtn) themeBtn.textContent = '🌙';
+    }
+
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            rootElement.classList.toggle('dark-theme');
+            const isDark = rootElement.classList.contains('dark-theme');
+            themeBtn.textContent = isDark ? '☀️' : '🌙';
+            localStorage.setItem('wl_theme', isDark ? 'dark' : 'light');
+        });
+    }
+    </script>
+</body>
+</html>

@@ -1,0 +1,143 @@
+/* Стили для страницы соц. сетей без рамок и блоков */
+        main.socials-main {
+            padding-top: 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: calc(100vh - 180px);
+        }
+
+        .socials-title {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+
+        /* Треугольная раскладка */
+        .triangle-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 50px;
+            width: 100%;
+            max-width: 500px;
+            margin: 0 auto 60px auto;
+        }
+
+        .triangle-top {
+            display: flex;
+            justify-content: center;
+        }
+
+        .triangle-bottom {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            padding: 0 20px;
+        }
+
+        /* Стиль иконки-ссылки (абсолютно без рамок, фонов и блоков) */
+        .social-link {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--text-color);
+            background: none;
+            border: none;
+            outline: none;
+            box-shadow: none;
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease;
+        }
+
+        .social-icon-wrapper {
+            width: 90px;
+            height: 90px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            /* Плавное покачивание/левитация для эффекта свободного висения */
+            animation: float 4s ease-in-out infinite;
+        }
+
+        .social-link:nth-child(2) .social-icon-wrapper {
+            animation-delay: -1.3s;
+        }
+
+        .triangle-top .social-icon-wrapper {
+            animation-delay: -2.6s;
+        }
+
+        .social-link svg {
+            width: 75px;
+            height: 75px;
+            transition: transform 0.3s ease, filter 0.3s ease;
+        }
+
+        .social-label {
+            font-size: 1.1rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: color 0.3s ease, transform 0.3s ease;
+        }
+
+        /* Эффекты при наведении */
+        .social-link:hover {
+            transform: scale(1.15);
+        }
+
+        /* Индивидуальные цвета при наведении */
+        .social-link.telegram:hover .social-label {
+            color: #24A1DE;
+        }
+        .social-link.telegram:hover svg {
+            filter: drop-shadow(0 0 12px rgba(36, 161, 222, 0.6));
+        }
+
+        .social-link.boosty:hover .social-label {
+            color: #F15A24;
+        }
+        .social-link.boosty:hover svg {
+            filter: drop-shadow(0 0 12px rgba(241, 90, 36, 0.6));
+        }
+
+        .social-link.mangalib:hover .social-label {
+            color: #FFC107;
+        }
+        .social-link.mangalib:hover svg {
+            filter: drop-shadow(0 0 12px rgba(255, 193, 7, 0.6));
+        }
+
+        /* Левитация элементов */
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0px);
+            }
+            50% {
+                transform: translateY(-10px);
+            }
+        }
+
+        /* Адаптивность под мобильные устройства */
+        @media (max-width: 600px) {
+            main.socials-main {
+                padding-top: 80px;
+            }
+            .triangle-container {
+                max-width: 340px;
+                gap: 30px;
+            }
+            .social-icon-wrapper {
+                width: 70px;
+                height: 70px;
+            }
+            .social-link svg {
+                width: 58px;
+                height: 58px;
+            }
+            .social-label {
+                font-size: 0.95rem;
+            }
+        }
