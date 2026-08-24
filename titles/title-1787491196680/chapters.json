@@ -1,5 +1,18 @@
 [
   {
+    "id": "vol-1-ch-35",
+    "volume": 1,
+    "number": "3.5",
+    "pagesCount": 4,
+    "pages": [
+      "titles/title-1787491196680/chapters/vol-1-ch-35/001.webp",
+      "titles/title-1787491196680/chapters/vol-1-ch-35/002.webp",
+      "titles/title-1787491196680/chapters/vol-1-ch-35/003.webp",
+      "titles/title-1787491196680/chapters/vol-1-ch-35/004.webp"
+    ],
+    "createdAt": "2026-08-24T13:52:45.513Z"
+  },
+  {
     "id": "vol-1-ch-45",
     "volume": 1,
     "number": "4.5",
