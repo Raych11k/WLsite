@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Читалка — WL</title>
+    <link rel="icon" href="data/icon.png" type="image/png">
+    <link rel="stylesheet" href="styles/reader_page.css">
+    <script>
+    if (localStorage.getItem('wl_theme') === 'dark') {
+        document.documentElement.classList.add('dark-theme');
+    }
+    </script>
+</head>
+<body>
+
+    <header>
+        <button class="back-btn" onclick="history.back()">Назад</button>
+        
+        <div class="chapter-navigation">
+            <button class="chapter-nav-btn" id="prev-chapter-btn" title="Предыдущая глава">◄</button>
+            <div class="chapter-title" id="chapter-title">Загрузка...</div>
+            <button class="chapter-nav-btn" id="next-chapter-btn" title="Следующая глава">►</button>
+        </div>
+
+        <div style="width: 85px;"></div>
+    </header>
+
+    <main>
+        <div id="reader-container" class="vertical-mode fit-width">
+            <div class="nav-zone prev" id="nav-prev" title="Предыдущая страница"></div>
+            <div class="nav-zone next" id="nav-next" title="Следующая страница"></div>
+            <div id="pages-wrapper"></div>
+        </div>
+    </main>
+
+    <button class="settings-btn" id="open-settings" title="Настройки чтения">
+        <svg viewBox="0 0 24 24">
+            <path d="M3 17v2h6v-2H3zM3 5v2h10V5H3zm10 16v-2h8v-2h-8v-2h-2v6h2zM7 9v2H3v2h4v2h2V9H7zm14 4v-2H11v2h10zm-6-4h2V7h4V5h-4V3h-2v6z"/>
+        </svg>
+    </button>
+
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-content">
+            <h3>Режим чтения</h3>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="read-mode" value="vertical" checked> Вертикально
+                </label>
+                <label>
+                    <input type="radio" name="read-mode" value="horizontal"> Горизонтально
+                </label>
+            </div>
+
+            <h3>Вид изображения</h3>
+            <div class="radio-group">
+                <label>
+                    <input type="radio" name="fit-mode" value="width" checked> По ширине экрана
+                </label>
+                <label>
+                    <input type="radio" name="fit-mode" value="height"> По высоте экрана
+                </label>
+            </div>
+
+            <button class="close-modal-btn" id="close-settings">Закрыть</button>
+        </div>
+    </div>
+
+    <script>
+        const REPO_NAME = 'Raych11k/WLsite';
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const titleId = urlParams.get('title');
+        const chapterId = urlParams.get('chapter');
+
+        const readerContainer = document.getElementById('reader-container');
+        const pagesWrapper = document.getElementById('pages-wrapper');
+        const chapterTitleEl = document.getElementById('chapter-title');
+        const currentPageNum = document.getElementById('current-page-num');
+        const totalPagesNum = document.getElementById('total-pages-num');
+        const prevChapterBtn = document.getElementById('prev-chapter-btn');
+        const nextChapterBtn = document.getElementById('next-chapter-btn');
+
+        const settingsModal = document.getElementById('settings-modal');
+        const openSettingsBtn = document.getElementById('open-settings');
+        const closeSettingsBtn = document.getElementById('close-settings');
+        const modeRadios = document.getElementsByName('read-mode');
+        const fitModeRadios = document.getElementsByName('fit-mode');
+        
+        const navPrev = document.getElementById('nav-prev');
+        const navNext = document.getElementById('nav-next');
+
+        let currentPageIndex = 0;
+        let isHorizontal = false;
+        let totalPages = 0;
+
+        // Загрузка настроек
+        const savedMode = localStorage.getItem('wl_read_mode') || 'vertical';
+        const savedFit = localStorage.getItem('wl_fit_mode') || 'width';
+
+        modeRadios.forEach(radio => {
+            if (radio.value === savedMode) radio.checked = true;
+        });
+        if (savedMode === 'horizontal') {
+            isHorizontal = true;
+            readerContainer.classList.add('horizontal-mode');
+        } else {
+            isHorizontal = false;
+            readerContainer.classList.add('vertical-mode');
+        }
+
+        fitModeRadios.forEach(radio => {
+            if (radio.value === savedFit) radio.checked = true;
+        });
+        readerContainer.classList.add(`fit-${savedFit}`);
+
+        openSettingsBtn.addEventListener('click', () => settingsModal.classList.add('active'));
+        closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
+        settingsModal.addEventListener('click', (e) => { if (e.target === settingsModal) settingsModal.classList.remove('active'); });
+
+        modeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const mode = e.target.value;
+                localStorage.setItem('wl_read_mode', mode);
+                if (mode === 'horizontal') {
+                    isHorizontal = true;
+                    readerContainer.classList.remove('vertical-mode');
+                    readerContainer.classList.add('horizontal-mode');
+                    updateHorizontalView();
+                } else {
+                    isHorizontal = false;
+                    readerContainer.classList.remove('horizontal-mode');
+                    readerContainer.classList.add('vertical-mode');
+                }
+            });
+        });
+
+        fitModeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const fit = e.target.value;
+                localStorage.setItem('wl_fit_mode', fit);
+                readerContainer.classList.remove('fit-width', 'fit-height');
+                readerContainer.classList.add(`fit-${fit}`);
+            });
+        });
+
+        // Переключение страниц в горизонтальном режиме
+        function updateHorizontalView() {
+            const pageWrappers = pagesWrapper.querySelectorAll('.manga-page-wrapper');
+            pageWrappers.forEach((wrapper, index) => {
+                wrapper.classList.toggle('active', index === currentPageIndex);
+            });
+            window.scrollTo(0, 0);
+        }
+
+        // Загрузка глав и создание обертки с плашкой номера
+        async function loadReader() {
+            if (!titleId || !chapterId) {
+                chapterTitleEl.textContent = 'Ошибка: Глава не найдена';
+                return;
+            }
+
+            try {
+                const chapRes = await fetch(`https://raw.githubusercontent.com/${REPO_NAME}/main/titles/${titleId}/chapters.json`);
+                if (!chapRes.ok) throw new Error('Ошибка загрузки данных');
+
+                const chapters = await chapRes.json();
+                const currentChapterIndex = chapters.findIndex(c => c.id === chapterId);
+
+                if (currentChapterIndex === -1) {
+                    chapterTitleEl.textContent = 'Глава не найдена';
+                    return;
+                }
+
+                const currentChapter = chapters[currentChapterIndex];
+                chapterTitleEl.textContent = `Том ${currentChapter.volume} Глава ${currentChapter.number}`;
+
+                if (currentChapterIndex < chapters.length - 1) {
+                    const nextChap = chapters[currentChapterIndex + 1];
+                    nextChapterBtn.onclick = () => window.location.href = `reader.html?title=${titleId}&chapter=${nextChap.id}`;
+                    nextChapterBtn.disabled = false;
+                } else {
+                    nextChapterBtn.disabled = true;
+                }
+
+                if (currentChapterIndex > 0) {
+                    const prevChap = chapters[currentChapterIndex - 1];
+                    prevChapterBtn.onclick = () => window.location.href = `reader.html?title=${titleId}&chapter=${prevChap.id}`;
+                    prevChapterBtn.disabled = false;
+                } else {
+                    prevChapterBtn.disabled = true;
+                }
+
+                pagesWrapper.innerHTML = '';
+                const pagesList = currentChapter.pages || [];
+                totalPages = pagesList.length;
+
+                // Создаем контейнер для каждой страницы + бейдж номера
+                pagesList.forEach((pagePath, index) => {
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'manga-page-wrapper';
+                    if (index === 0) wrapper.classList.add('active');
+
+                    const img = document.createElement('img');
+                    img.src = `https://raw.githubusercontent.com/${REPO_NAME}/main/${pagePath}`;
+                    img.className = 'manga-page';
+
+                    const badge = document.createElement('div');
+                    badge.className = 'page-number-badge';
+                    badge.textContent = `${index + 1} / ${totalPages}`; // Формат: "1 / 9"
+
+                    wrapper.appendChild(img);
+                    wrapper.appendChild(badge);
+                    pagesWrapper.appendChild(wrapper);
+                });
+
+                if (isHorizontal) {
+                    updateHorizontalView();
+                }
+
+            } catch (err) {
+                console.error(err);
+                chapterTitleEl.textContent = 'Ошибка сети';
+            }
+        }
+
+        navNext.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isHorizontal && currentPageIndex < totalPages - 1) {
+                currentPageIndex++;
+                updateHorizontalView();
+            }
+        });
+
+        navPrev.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isHorizontal && currentPageIndex > 0) {
+                currentPageIndex--;
+                updateHorizontalView();
+            }
+        });
+
+        // Переключение стрелками на клавиатуре
+        window.addEventListener('keydown', (e) => {
+            if (!isHorizontal) return;
+            
+            if (e.key === 'ArrowRight' || e.key === 'KeyD') {
+                if (currentPageIndex < totalPages - 1) {
+                    currentPageIndex++;
+                    updateHorizontalView();
+                }
+            } else if (e.key === 'ArrowLeft' || e.key === 'KeyA') {
+                if (currentPageIndex > 0) {
+                    currentPageIndex--;
+                    updateHorizontalView();
+                }
+            }
+        });
+
+        window.addEventListener('DOMContentLoaded', loadReader);
+    </script>
+</body>
+</html>
