@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FAQ | WhiteLight</title>
+    <link rel="icon" href="data/icon.png" type="image/x-icon">
+    <link rel="stylesheet" href="styles/main_page.css">
+    <link rel="stylesheet" href="styles/faq_page.css">
+    <script>
+    // Сохранение темы при загрузке
+    if (localStorage.getItem('wl_theme') === 'dark') {
+        document.documentElement.classList.add('dark-theme');
+    }
+    </script>
+</head>
+<body>
+
+    <header>
+        <div class="logo-container" onclick="window.location.href='main.html'">
+            <img src="data/team-logo.png" alt="Лого">
+            <span class="logo-text">WhiteLight</span>
+        </div>
+
+        <div class="header-actions">
+            <button class="theme-toggle" id="theme-btn" title="Сменить тему">🌙</button>
+        </div>
+    </header>
+
+    <main class="faq-container">
+        <h2>Часто задаваемые вопросы</h2>
+        <p class="faq-subtitle">Ответы на самые популярные вопросы или же ЧаВо.</p>
+
+        <div class="faq-list">
+
+            <!-- ВОПРОС 1 -->
+            <div class="faq-item">
+                <button class="faq-question">
+                    <span>Что это за сайт?</span>
+                    <span class="faq-icon">▼</span>
+                </button>
+                <div class="faq-answer">
+                    <p>Как несложно догадаться, это мини-читалка для публикации переводов команды WhiteLight. По изначальной задумке этот сайт разарабатывался как альтернатива платформе Teletype для раннего выхода глав, а также из интереса основного переводчика и разработчика K4RMA.</p>
+                </div>
+            </div>
+
+            <!-- ВОПРОС 2 -->
+            <div class="faq-item">
+                <button class="faq-question">
+                    <span>Весь сайт прям сам сделал?</span>
+                    <span class="faq-icon">▼</span>
+                </button>
+                <div class="faq-answer">
+                    <p>Ну нет, блин, каюсь! Сайт был разработан моими небольшими знаниями веб-разработки и с помощью нейронки. Я бы и рад был всё сверстать сам, но на это понадобилось бы кучу сил, нервов и времени. Мне жалко тратить хоть что-то из этого. Тем не менее, я стремлюсь расти над собой и учиться создавать нечто подобное.</p>
+                </div>
+            </div>
+
+            <!-- ВОПРОС 3 -->
+            <div class="faq-item">
+                <button class="faq-question">
+                    <span>А можно вступить в команду?</span>
+                    <span class="faq-icon">▼</span>
+                </button>
+                <div class="faq-answer">
+                    <p>Хотя я и называю себя "соло-переводчиком", я только рад новым энтузиастам, которым хочется переводить тайтлы в своё удовольствие! Связаться со мной можно через <a href="socials.html">соц.сети</a>, но лучше через личку мангалиба. Как говорится, чем больше — тем веселее.</p>
+                </div>
+            </div>
+
+            <!-- ВОПРОС 4 -->
+            <div class="faq-item">
+                <button class="faq-question">
+                    <span>Можно ли как-то поддержать перевод?</span>
+                    <span class="faq-icon">▼</span>
+                </button>
+                <div class="faq-answer">
+                    <p>Разумеется, самая лучшая и простая поддержка — это актив читателя! Вы можете подписаться на нас в любых <a href="socials.html">соц.сетях</a>, иногда посещать этот сайт или даже оставить свой лайк на главной странице (это поможет сайту находится "на плаву"). При желании вы также можете поддержать команду финансово.</p>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <footer>
+        <nav class="footer-nav">
+            <a>О нас</a>
+            <a href="socials.html">Соц.сети</a>
+            <a href="faq.html">FAQ</a>
+        </nav>
+        <div class="footer-copyright">
+            &copy; 2026 WhiteLight. Все права защищены.
+        </div>
+    </footer>
+
+    <script>
+    // Логика переключения темы
+    const themeBtn = document.getElementById('theme-btn');
+    const rootElement = document.documentElement;
+
+    if (rootElement.classList.contains('dark-theme')) {
+        if (themeBtn) themeBtn.textContent = '☀️';
+    } else {
+        if (themeBtn) themeBtn.textContent = '🌙';
+    }
+
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            rootElement.classList.toggle('dark-theme');
+            const isDark = rootElement.classList.contains('dark-theme');
+            themeBtn.textContent = isDark ? '☀️' : '🌙';
+            localStorage.setItem('wl_theme', isDark ? 'dark' : 'light');
+        });
+    }
+
+    // Логика аккордеона (раскрытие вопросов)
+    document.querySelectorAll('.faq-question').forEach(button => {
+        button.addEventListener('click', () => {
+            const faqItem = button.parentElement;
+            
+            // Закрываем другие открытые вопросы (если нужно открывать только один одновременно)
+            document.querySelectorAll('.faq-item').forEach(item => {
+                if (item !== faqItem) {
+                    item.classList.remove('active');
+                }
+            });
+
+            // Переключаем текущий
+            faqItem.classList.toggle('active');
+        });
+    });
+    </script>
+</body>
+</html>
