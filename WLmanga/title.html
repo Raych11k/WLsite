@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Загрузка тайтла... | WhiteLight</title>
+    <link rel="icon" href="data/icon.png" type="image/png">
+    <link rel="stylesheet" href="styles/main_page.css">
+    <link rel="stylesheet" href="styles/title_page.css">
+    <script>
+    // Проверяем тему в localStorage до загрузки body, чтобы избежать вспышек белого фона
+    if (localStorage.getItem('wl_theme') === 'dark') {
+        document.documentElement.classList.add('dark-theme');
+    }
+    </script>
+
+    <script type="text/javascript">
+        (function(m,e,t,r,i,k,a){
+            m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+            m[i].l=1*new Date();
+            for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+            k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+        })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=111944456', 'ym');
+
+        ym(111944456, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+    </script>
+    <noscript><div><img src="https://mc.yandex.ru/watch/111944456" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+    
+</head>
+<body>
+
+    <header>
+        <div class="logo-container" onclick="window.location.href='main.html'">
+            <img src="data/team-logo.png" alt="Лого">
+            <span class="logo-text">WhiteLight</span>
+        </div>
+        <button class="theme-toggle" id="theme-btn" title="Сменить тему">🌙</button>
+    </header>
+
+    <main>
+        <div id="loading" class="title-loading">
+            <div class="spinner"></div>
+            <span>Загрузка тайтла...</span>
+        </div>
+
+        <div id="title-content" style="display: none;">
+            <div class="title-container">
+                <!-- Сайдбар -->
+                <div class="title-sidebar">
+                    <div class="cover-wrapper">
+                        <div class="title-cover-glow" id="title-cover-glow"></div>
+                        <div class="title-cover" id="title-cover"></div>
+                    </div>
+                    
+                    <div class="title-meta-box">
+                        <div class="meta-item">
+                            <span class="meta-label">Тип</span>
+                            <span class="meta-value" id="meta-type">-</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Год</span>
+                            <span class="meta-value" id="meta-year">-</span>
+                        </div>
+                        <div class="meta-item">
+                            <span class="meta-label">Статус</span>
+                            <span class="status-badge" id="meta-status">-</span>
+                        </div>
+                        <div class="meta-item" style="flex-direction: column; align-items: center; text-align: center;">
+                            <span class="meta-label" style="margin-bottom: 4px;">Популярность</span>
+                            <div id="meta-popularity" style="font-size: 20px; letter-spacing: 2px;">—</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Основной контент -->
+                <div class="title-main-info">
+                    <div class="title-header-block">
+                        <h1 class="title-name-ru" id="title-name-ru">Название</h1>
+                        <h2 class="title-name-orig" id="title-name-orig">Original Name</h2>
+                    </div>
+
+                    <div class="genres-list" id="genres-list"></div>
+
+                    <div class="title-description">
+                        <h3>Описание</h3>
+                        <p id="title-description-text" class="title-description-collapsed">Описание отсутствует.</p>
+                        <button id="desc-toggle-btn" class="description-toggle-btn" style="display: none;">Читать далее</button>
+                    </div>
+
+                    <!-- Список глав -->
+                    <div class="chapters-section">
+                        <h2 class="chapters-section-title">Список глав</h2>
+                        <div id="chapters-container"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer>
+        <nav class="footer-nav">
+            <a href="#about">О нас</a>
+            <a href="socials.html">Соц.сети</a>
+            <a href="faq.html">FAQ</a>
+        </nav>
+        <div class="footer-copyright">
+            &copy; 2026 WhiteLight. Все права защищены.
+        </div>
+    </footer>
+
+    <script>
+    const REPO_NAME = 'Raych11k/WLsite';
+    let currentTitleStatus = '';
+
+    // Функция для работы с прочитанными главами
+    function getReadChapters() {
+        return JSON.parse(localStorage.getItem('wl_read_chapters') || '[]');
+    }
+
+    function markChapterAsRead(chapterKey) {
+        const readList = getReadChapters();
+        if (!readList.includes(chapterKey)) {
+            readList.push(chapterKey);
+            localStorage.setItem('wl_read_chapters', JSON.stringify(readList));
+        }
+    }
+
+    const themeBtn = document.getElementById('theme-btn');
+    const rootElement = document.documentElement;
+
+    // Устанавливаем корректную иконку при загрузке
+    if (rootElement.classList.contains('dark-theme')) {
+        if (themeBtn) themeBtn.textContent = '☀️';
+    } else {
+        if (themeBtn) themeBtn.textContent = '🌙';
+    }
+
+    // Обработка клика по кнопке смены темы
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            rootElement.classList.toggle('dark-theme');
+            const isDark = rootElement.classList.contains('dark-theme');
+            
+            themeBtn.textContent = isDark ? '☀️' : '🌙';
+            localStorage.setItem('wl_theme', isDark ? 'dark' : 'light');
+        });
+    }
+
+    async function loadTitlePage() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const titleId = urlParams.get('id');
+
+        if (!titleId) {
+            showError("Тайтл не найден или указан неверный ID.");
+            return;
+        }
+
+        try {
+            const dataReq = fetch(`https://raw.githubusercontent.com/${REPO_NAME}/main/titles/${titleId}/data.json`);
+            const chapReq = fetch(`https://raw.githubusercontent.com/${REPO_NAME}/main/titles/${titleId}/chapters.json`);
+
+            const [dataRes, chapRes] = await Promise.all([dataReq, chapReq]);
+
+            if (!dataRes.ok) {
+                showError("Не удалось найти данные выбранного тайтла.");
+                return;
+            }
+
+            const titleData = await dataRes.json();
+            let chaptersData = [];
+            if (chapRes.ok) {
+                chaptersData = await chapRes.json();
+            }
+
+            renderTitleDetails(titleData);
+            renderChapters(titleId, chaptersData);
+            
+            setupTitlePopularity(titleId);
+
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('title-content').style.display = 'block';
+
+        } catch (err) {
+            console.error("Ошибка:", err);
+            showError("Произошла ошибка при загрузке данных с сервера.");
+        }
+    }
+
+    function renderTitleDetails(data) {
+        document.title = `${data.name} | WhiteLight`;
+        currentTitleStatus = data.status || '';
+
+        const coverUrl = `https://raw.githubusercontent.com/${REPO_NAME}/main/${data.cover}`;
+        document.getElementById('title-cover').style.backgroundImage = `url('${coverUrl}')`;
+        document.getElementById('title-cover-glow').style.backgroundImage = `url('${coverUrl}')`;
+
+        document.getElementById('title-name-ru').textContent = data.name || 'Без названия';
+        document.getElementById('title-name-orig').textContent = data.origName || '';
+
+        document.getElementById('title-description-text').textContent = data.description || 'Описание не заполнено.';
+        setTimeout(setupDescriptionToggle, 50);
+
+        document.getElementById('title-description-text').textContent = data.description || 'Описание не заполнено.';
+
+        document.getElementById('meta-type').textContent = data.type || 'Манга';
+        document.getElementById('meta-year').textContent = data.year || '—';
+        
+        const statusEl = document.getElementById('meta-status');
+        const statusText = data.status || 'Онгоинг';
+        statusEl.textContent = statusText;
+        
+        statusEl.className = 'status-badge';
+        const lowerStatus = statusText.toLowerCase();
+        
+        if (lowerStatus === 'онгоинг') statusEl.classList.add('status-ongoing');
+        else if (lowerStatus === 'завершён') statusEl.classList.add('status-completed');
+        else if (lowerStatus === 'отложен') statusEl.classList.add('status-onhold');
+        else if (lowerStatus === 'брошен') statusEl.classList.add('status-dropped');
+        else statusEl.classList.add('status-ongoing');
+
+        const genresBox = document.getElementById('genres-list');
+        genresBox.innerHTML = '';
+        if (data.genres && data.genres.length > 0) {
+            data.genres.forEach(genre => {
+                const tag = document.createElement('span');
+                tag.className = 'genre-tag';
+                tag.textContent = genre;
+                genresBox.appendChild(tag);
+            });
+        }
+    }
+
+    // Функция для расчёта огоньков на основе просмотров
+    function getFlameRating(views) {
+        if (views >= 500) return '🔥🔥🔥';
+        if (views >= 100) return '🔥🔥';
+        if (views >= 30) return '🔥';
+        return '—';
+    }
+
+    // Загрузка и обновление популярности через стабильный API
+    async function setupTitlePopularity(titleId) {
+        // Используем уникальное имя вашего сайта как namespace и id тайтла как ключ
+        const namespace = 'whitelight-site.github.io';
+        const key = `title_${titleId}`;
+        const popularityEl = document.getElementById('meta-popularity');
+
+        if (!popularityEl) return;
+
+        // Защита от частых накруток за сутки через localStorage
+        const lastViewKey = `wl_last_view_${titleId}`;
+        const lastViewTime = localStorage.getItem(lastViewKey);
+        const now = new Date().getTime();
+        const twentyFourHours = 24 * 60 * 60 * 1000;
+        
+        let url = `https://abacus.jasoncameron.dev/get/${namespace}/${key}`;
+        
+        // Если прошли сутки или просмотров еще не было — увеличиваем счетчик на 1
+        if (!lastViewTime || (now - lastViewTime > twentyFourHours)) {
+            url = `https://abacus.jasoncameron.dev/hit/${namespace}/${key}`;
+            localStorage.setItem(lastViewKey, now);
+        }
+
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error('Ошибка сети');
+            
+            const data = await response.json();
+            const totalViews = data.value || 1;
+
+            // Выставляем огоньки и подсказку с цифрой
+            popularityEl.textContent = getFlameRating(totalViews);
+            popularityEl.title = `Просмотров: ${totalViews}`;
+        } catch (err) {
+            console.error("Не удалось загрузить популярность:", err);
+            popularityEl.textContent = '—';
+        }
+    }
+
+    // Функция для правильного склонения слова "глава"
+    function getChapterPlural(count) {
+        const mod10 = count % 10;
+        const mod100 = count % 100;
+        
+        if (mod100 >= 11 && mod100 <= 19) {
+            return `${count} глав`;
+        }
+        if (mod10 === 1) {
+            return `${count} глава`;
+        }
+        if (mod10 >= 2 && mod10 <= 4) {
+            return `${count} главы`;
+        }
+        return `${count} глав`;
+    }
+
+    function renderChapters(titleId, chapters) {
+        const container = document.getElementById('chapters-container');
+        container.innerHTML = '';
+
+        if (!chapters || chapters.length === 0) {
+            container.innerHTML = '<div class="no-chapters">У этого тайтла пока нет опубликованных глав.</div>';
+            return;
+        }
+
+        const readChapters = getReadChapters();
+        const volumes = {};
+
+        chapters.forEach(ch => {
+            const volNum = ch.volume || 1;
+            if (!volumes[volNum]) volumes[volNum] = [];
+            volumes[volNum].push(ch);
+        });
+
+        // Сортировка томов по убыванию
+        const sortedVolumeKeys = Object.keys(volumes).sort((a, b) => parseInt(b) - parseInt(a));
+
+        // Определаем самую последнюю главу тайтла (с максимальным томом и максимальным номером)
+        const maxVol = sortedVolumeKeys[0];
+        const isCompleted = (currentTitleStatus.toLowerCase() === 'завершён' || currentTitleStatus.toLowerCase() === 'завершен');
+        
+        let maxChapterId = null;
+        if (isCompleted && volumes[maxVol] && volumes[maxVol].length > 0) {
+            // Ищем главу с максимальным номером внутри самого последнего тома
+            const lastChapter = volumes[maxVol].reduce((prev, curr) => 
+                parseFloat(curr.number) > parseFloat(prev.number) ? curr : prev
+            );
+            maxChapterId = lastChapter.id;
+        }
+
+        sortedVolumeKeys.forEach(volNum => {
+            const volGroup = document.createElement('div');
+            volGroup.className = 'volume-card';
+
+            const countText = getChapterPlural(volumes[volNum].length);
+
+            const volHeader = document.createElement('div');
+            volHeader.className = 'volume-header';
+            volHeader.innerHTML = `Том ${volNum} <span>${countText}</span>`;
+            volGroup.appendChild(volHeader);
+
+            const chaptersList = document.createElement('div');
+            chaptersList.className = 'chapters-list';
+
+            // Сортировка глав внутри тома по убыванию
+            const sortedChapters = volumes[volNum].sort((a, b) => parseFloat(b.number) - parseFloat(a.number));
+
+            sortedChapters.forEach(ch => {
+                const item = document.createElement('div');
+                const chapterKey = `${titleId}_${ch.id}`;
+                const isRead = readChapters.includes(chapterKey);
+
+                item.className = `chapter-item ${isRead ? 'read' : ''}`;
+
+                let dateStr = ch.createdAt ? new Date(ch.createdAt).toLocaleDateString('ru-RU') : '';
+
+                // Проверяем, является ли эта глава финальной
+                const isFinalChapter = isCompleted && (ch.id === maxChapterId);
+                const endBadgeHtml = isFinalChapter ? '<span class="end-badge">Конец</span>' : '';
+
+                item.innerHTML = `
+                    <span class="chapter-title-text">Глава ${ch.number}${endBadgeHtml}</span>
+                    <span class="chapter-date">${dateStr}</span>
+                `;
+
+                item.onclick = () => {
+                    markChapterAsRead(chapterKey);
+                    window.location.href = `reader.html?title=${titleId}&chapter=${ch.id}`;
+                };
+
+                chaptersList.appendChild(item);
+            });
+
+            volGroup.appendChild(chaptersList);
+            container.appendChild(volGroup);
+        });
+    }
+
+    function setupDescriptionToggle() {
+        const descText = document.getElementById('title-description-text');
+        const toggleBtn = document.getElementById('desc-toggle-btn');
+
+        if (!descText || !toggleBtn) return;
+
+        // Сравниваем реальную высоту текста (scrollHeight) с отображаемой (clientHeight)
+        if (descText.scrollHeight > descText.clientHeight) {
+            toggleBtn.style.display = 'inline-block';
+            
+            toggleBtn.onclick = () => {
+                const isCollapsed = descText.classList.contains('title-description-collapsed');
+                
+                if (isCollapsed) {
+                    descText.classList.remove('title-description-collapsed');
+                    toggleBtn.textContent = 'Свернуть';
+                } else {
+                    descText.classList.add('title-description-collapsed');
+                    toggleBtn.textContent = 'Читать далее';
+                }
+            };
+        } else {
+            toggleBtn.style.display = 'none';
+        }
+    }
+
+    function showError(msg) {
+        document.getElementById('loading').style.display = 'none';
+        const main = document.querySelector('main');
+        main.innerHTML = `<div class="error-msg">${msg}</div>`;
+    }
+
+    window.addEventListener('DOMContentLoaded', loadTitlePage);
+    </script>
+</body>
+</html>

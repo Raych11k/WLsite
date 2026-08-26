@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WL Читалка</title>
+    <link rel="icon" href="data/icon.png" type="изображение/формат">
+    <link rel="stylesheet" href="styles/main_page.css">
+    <script>
+    // Проверяем тему в localStorage до загрузки body, чтобы избежать вспышек белого фона
+    if (localStorage.getItem('wl_theme') === 'dark') {
+        document.documentElement.classList.add('dark-theme');
+    }
+    </script>
+</head>
+<body>
+
+    <header>
+        <div class="logo-container" onclick="window.location.href='main.html'">
+            <img src="data/team-logo.png" alt="Лого">
+            <span class="logo-text">WhiteLight</span>
+        </div>
+
+        <div class="header-actions">
+            <button id="like-btn" class="like-btn" title="Поддержать проект">
+                <svg class="heart-icon" viewBox="0 0 24 24">
+                    <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
+                </svg>
+                <span id="like-count">0 лайков</span>
+            </button>
+
+            <button class="theme-toggle" id="theme-btn" title="Сменить тему">🌙</button>
+        </div>
+    </header>
+
+    <div class="ticker-wrapper">
+        <div class="ticker-content">
+            <span>★ WHITELIGHT</span>
+            <span>★ БИБЛИОТЕКА ВСЕХ ПЕРЕВОДОВ</span>
+            <span>★ ЧИТАЙТЕ БЕЗ СМС И РЕГИСТРАЦИИ</span>
+            <span>★ НИКАКОЙ РЕКЛАМЫ</span>
+            <span>★ ОТКРЫТИЕ САЙТА</span>
+        </div>
+        <div class="ticker-content" aria-hidden="true">
+            <span>★ WHITELIGHT</span>
+            <span>★ БИБЛИОТЕКА ВСЕХ ПЕРЕВОДОВ</span>
+            <span>★ ЧИТАЙТЕ БЕЗ СМС И РЕГИСТРАЦИИ</span>
+            <span>★ НИКАКОЙ РЕКЛАМЫ</span>
+            <span>★ ОТКРЫТИЕ САЙТА</span>
+        </div>
+    </div>
+    
+    <main>
+        <section id="recent">
+            <h2>Недавние главы</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Лимонные девочки</div>
+                    <div class="card-chapter">Глава 42</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Крутой комикс</div>
+                    <div class="card-chapter">Глава 15</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Папка "Дети"</div>
+                    <div class="card-chapter">Глава 128</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Гугугага</div>
+                    <div class="card-chapter">Глава 5</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="all-projects">
+            <h2>Все тайтлы</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Манга А</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Манга И</div>
+                </div>
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Манга Б</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="graveyard">
+            <h2>Кладбище "брошенных"</h2>
+            <div class="grid">
+                <div class="card">
+                    <div class="card-cover">Обложка</div>
+                    <div class="card-title">Мертвец 💀</div>
+                    <div class="card-chapter">Заброшен</div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <nav class="footer-nav">
+            <a>О нас</a>
+            <a href="socials.html">Соц.сети</a>
+            <a href="faq.html">FAQ</a>
+        </nav>
+        <div class="footer-copyright">
+            &copy; 2026 WhiteLight. Все права защищены.
+        </div>
+    </footer>
+
+    <script>
+    const REPO_NAME = 'Raych11k/WLsite'; 
+
+    const themeBtn = document.getElementById('theme-btn');
+    const rootElement = document.documentElement;
+
+    // Устанавливаем корректную иконку при загрузке
+    if (rootElement.classList.contains('dark-theme')) {
+        if (themeBtn) themeBtn.textContent = '☀️';
+    } else {
+        if (themeBtn) themeBtn.textContent = '🌙';
+    }
+
+    // Обработка клика по кнопке смены темы
+    if (themeBtn) {
+        themeBtn.addEventListener('click', () => {
+            rootElement.classList.toggle('dark-theme');
+            const isDark = rootElement.classList.contains('dark-theme');
+            
+            themeBtn.textContent = isDark ? '☀️' : '🌙';
+            localStorage.setItem('wl_theme', isDark ? 'dark' : 'light');
+        });
+    }
+
+    // Загрузка главной страницы
+    async function loadMainPage() {
+        try {
+            // 1. Получаем список папок из /titles
+            const res = await fetch(`https://api.github.com/repos/${REPO_NAME}/contents/titles`);
+            if (!res.ok) return;
+
+            const items = await res.json();
+            const folders = items.filter(item => item.type === 'dir');
+
+            const allTitles = [];
+            const allChapters = [];
+
+            // 2. Параллельно загружаем data.json и chapters.json для каждого тайтла
+            for (const folder of folders) {
+                try {
+                    const dataReq = fetch(`https://raw.githubusercontent.com/${REPO_NAME}/main/titles/${folder.name}/data.json`);
+                    const chapReq = fetch(`https://raw.githubusercontent.com/${REPO_NAME}/main/titles/${folder.name}/chapters.json`);
+
+                    const [dataRes, chapRes] = await Promise.all([dataReq, chapReq]);
+
+                    if (dataRes.ok) {
+                        const titleData = await dataRes.json();
+                        allTitles.push(titleData);
+
+                        if (chapRes.ok) {
+                            const chaptersData = await chapRes.json();
+                            // Собираем главы в общий список с привязкой к тайтлу
+                            chaptersData.forEach(ch => {
+                                allChapters.push({
+                                    mangaId: titleData.id,
+                                    mangaName: titleData.name,
+                                    cover: titleData.cover,
+                                    volume: ch.volume,
+                                    number: ch.number,
+                                    chapterId: ch.id,
+                                    createdAt: ch.createdAt || '1970-01-01T00:00:00.000Z'
+                                });
+                            });
+                        }
+                    }
+                } catch (e) {
+                    console.error(`Ошибка загрузки данных ${folder.name}:`, e);
+                }
+            }
+
+            // 3. РЕНДЕР: Недавние главы (сортировка от новых к старым)
+            renderRecentChapters(allChapters);
+
+            // 4. РЕНДЕР: Все проекты и Кладбище
+            renderAllProjects(allTitles);
+
+        } catch (err) {
+            console.error('Ошибка загрузки главной:', err);
+        }
+    }
+
+    // Отрисовка недавних глав
+    function renderRecentChapters(chapters) {
+        const container = document.querySelector('#recent .grid');
+        if (!container) return;
+
+        if (chapters.length === 0) {
+            container.innerHTML = '<p style="color:#888;">Главы пока не выходили.</p>';
+            return;
+        }
+
+        // Сортируем по дате публикации (свежие вверху)
+        chapters.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        // Ограничение с запасом, чтобы заполнить широкий ряд
+        const limit = Math.min(chapters.length, 5); 
+        const recentList = chapters.slice(0, limit);
+
+        container.innerHTML = '';
+
+        recentList.forEach(ch => {
+            const card = document.createElement('div');
+            card.className = 'card';
+
+            const coverUrl = `https://raw.githubusercontent.com/${REPO_NAME}/main/${ch.cover}`;
+
+            card.innerHTML = `
+                <div class="card-cover" style="background-image: url('${coverUrl}'); background-size: cover; background-position: center;"></div>
+                <div class="card-title">${ch.mangaName}</div>
+                <div class="card-chapter"><span class="highlight-chapter">Том ${ch.volume}</span> <span class="highlight-chapter">Глава ${ch.number}</span></div>
+            `;
+
+            card.onclick = () => {
+                window.location.href = `reader.html?title=${ch.mangaId}&chapter=${ch.chapterId}`;
+            };
+
+            container.appendChild(card);
+        });
+    }
+
+    // Отрисовка каталога проектов
+    function renderAllProjects(titles) {
+        const allGrid = document.querySelector('#all-projects .grid');
+        const graveGrid = document.querySelector('#graveyard .grid');
+
+        if (allGrid) allGrid.innerHTML = '';
+        if (graveGrid) graveGrid.innerHTML = '';
+
+        titles.sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+
+        titles.forEach(title => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            const coverUrl = `https://raw.githubusercontent.com/${REPO_NAME}/main/${title.cover}`;
+
+            card.innerHTML = `
+                <div class="card-cover" style="background-image: url('${coverUrl}'); background-size: cover; background-position: center;"></div>
+                <div class="card-title">${title.name}</div>
+            `;
+
+            card.onclick = () => {
+                window.location.href = `title.html?id=${title.id}`;
+            };
+
+            // Разделяем нормальные проекты и заброшенные
+            if (title.status === 'Брошен' && graveGrid) {
+                graveGrid.appendChild(card);
+            } else if (allGrid) {
+                allGrid.appendChild(card);
+            }
+        });
+    }
+
+    const NAMESPACE = 'whitelight-site.github.io';
+    const LIKE_KEY = 'site_total_likes';
+
+    function getLikePlural(count) {
+        const mod10 = count % 10;
+        const mod100 = count % 100;
+
+        if (mod100 >= 11 && mod100 <= 19) {
+            return `${count} лайков`;
+        }
+        if (mod10 === 1) {
+            return `${count} лайк`;
+        }
+        if (mod10 >= 2 && mod10 <= 4) {
+            return `${count} лайка`;
+        }
+        return `${count} лайков`;
+    }
+
+    async function initLikes() {
+        const likeBtn = document.getElementById('like-btn');
+        const likeCountEl = document.getElementById('like-count');
+
+        if (!likeBtn || !likeCountEl) return;
+
+        let currentLikes = 0;
+
+        if (localStorage.getItem('wl_site_liked') === 'true') {
+            likeBtn.classList.add('liked');
+        }
+
+        try {
+            const res = await fetch(`https://abacus.jasoncameron.dev/get/${NAMESPACE}/${LIKE_KEY}`);
+            if (res.ok) {
+                const data = await res.json();
+                currentLikes = data.value || 0;
+                likeCountEl.textContent = getLikePlural(currentLikes);
+            }
+        } catch (e) {
+            console.error('Ошибка получения лайков:', e);
+        }
+
+        likeBtn.addEventListener('click', async () => {
+            if (!likeBtn.classList.contains('liked')) {
+                likeBtn.classList.add('liked');
+                localStorage.setItem('wl_site_liked', 'true');
+
+                currentLikes++;
+                likeCountEl.textContent = getLikePlural(currentLikes);
+
+                try {
+                    await fetch(`https://abacus.jasoncameron.dev/hit/${NAMESPACE}/${LIKE_KEY}`);
+                } catch (e) {
+                    console.error('Ошибка отправки лайка:', e);
+                }
+            }
+        });
+    }
+
+    // Запуск инициализации при загрузке страницы
+    window.addEventListener('DOMContentLoaded', () => {
+        loadMainPage();
+        initLikes();
+    });
+    </script>
+</body>
+</html>
