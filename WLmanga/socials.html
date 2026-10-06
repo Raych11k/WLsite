@@ -1,101 +1,74 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" data-theme="dark">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#09090d">
     <title>Социальные сети | WhiteLight</title>
-    <link rel="icon" href="data/icon.png" type="image/x-icon">
-    <link rel="stylesheet" href="styles/main_page.css">
-    <link rel="stylesheet" href="styles/socials_page.css">
+    <link rel="icon" href="data/icon.png" type="image/png">
     <script>
-    if (localStorage.getItem('wl_theme') === 'dark') {
-        document.documentElement.classList.add('dark-theme');
-    }
+    try { document.documentElement.dataset.theme = localStorage.getItem('wl_theme') === 'light' ? 'light' : 'dark'; } catch (e) {}
     </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=Unbounded:wght@500;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles/wl.css">
 </head>
 <body>
 
-    <header>
-        <div class="logo-container" onclick="window.location.href='main.html'">
-            <img src="data/team-logo.png" alt="Лого">
-            <span class="logo-text">WhiteLight</span>
+    <header id="site-header"></header>
+
+    <main class="page">
+        <div class="page-hero">
+            <p class="section-kicker">Соц.сети</p>
+            <h1 class="page-title">Мы в <em>соц.&nbsp;сетях</em></h1>
+            <p class="page-lead">Анонсы глав, закулисье перевода и поддержка команды — выбирайте, где удобнее.</p>
         </div>
 
-        <div class="header-actions">
-            <button class="theme-toggle" id="theme-btn" title="Сменить тему">🌙</button>
-        </div>
-    </header>
+        <div class="socials-grid">
+            <a href="https://t.me/karmatranslate8" target="_blank" rel="noopener noreferrer" class="social telegram" data-reveal>
+                <div class="social-top">
+                    <span class="social-icon"><img src="data/TG.png" alt=""></span>
+                    <span class="social-arrow" data-arrow></span>
+                </div>
+                <div>
+                    <p class="social-name">Telegram</p>
+                    <p class="social-desc">Главный канал команды: первыми узнавайте о новых главах, опросах и планах перевода.</p>
+                    <span class="social-handle">t.me/karmatranslate8</span>
+                </div>
+            </a>
 
-    <main class="socials-main">
-        <div class="socials-title">
-            <h2>Мы в соц. сетях</h2>
-        </div>
+            <a href="https://boosty.to/karmatranslate8" target="_blank" rel="noopener noreferrer" class="social boosty" data-reveal>
+                <div class="social-top">
+                    <span class="social-icon"><img src="data/BOOSTY.png" alt=""></span>
+                    <span class="social-arrow" data-arrow></span>
+                </div>
+                <div>
+                    <p class="social-name">Boosty</p>
+                    <p class="social-desc">Поддержать команду финансово.</p>
+                </div>
+            </a>
 
-        <!-- Контейнер с треугольным расположением элементов -->
-        <div class="triangle-container">
-            <!-- ВЕРШИНА ТРЕУГОЛЬНИКА: Telegram -->
-            <div class="triangle-top">
-                <a href="https://t.me/karmatranslate8" target="_blank" rel="noopener noreferrer" class="social-link telegram" title="Telegram">
-                    <div class="social-icon-wrapper">
-                        <!-- Иконка Telegram -->
-                        <img src="data/TG.png" alt="Telegram" style="width: 70px; height: 70px; object-fit: contain;">
-                    </div>
-                    <span class="social-label">Telegram</span>
-                </a>
-            </div>
-
-            <!-- ОСНОВАНИЕ ТРЕУГОЛЬНИКА: Boosty и MangaLib -->
-            <div class="triangle-bottom">
-                <!-- Левый угол: Boosty -->
-                <a href="https://boosty.to/karmatranslate8" target="_blank" rel="noopener noreferrer" class="social-link boosty" title="Boosty">
-                    <div class="social-icon-wrapper">
-                        <!-- Иконка Boosty -->
-                        <img src="data/BOOSTY.png" alt="Boosty" style="width: 70px; height: 70px; object-fit: contain;">
-                    </div>
-                    <span class="social-label">Boosty</span>
-                </a>
-
-                <!-- Правый угол: MangaLib -->
-                <a href="https://mangalib.me/ru/team/39655--whitelight" target="_blank" rel="noopener noreferrer" class="social-link mangalib" title="MangaLib">
-                    <div class="social-icon-wrapper">
-                        <!-- Иконка MangaLib -->
-                        <img src="https://static.rustore.ru/imgproxy/_8ypWpuzBPq7cF3jlZ01m5LCxlTgaYEa9EZB22TScc4/preset:vk_og_img/plain/https://static.rustore.ru/apk/2063541439/content/ICON/6fc5feaf-001c-41ab-ad45-fdfb43ffc53d.jpg@webp" alt="MangaLib" style="width: 70px; height: 70px; object-fit: contain;">
-                    </div>
-                    <span class="social-label">MangaLib</span>
-                </a>
-            </div>
+            <a href="https://mangalib.me/ru/team/39655--whitelight" target="_blank" rel="noopener noreferrer" class="social mangalib" data-reveal>
+                <div class="social-top">
+                    <span class="social-icon"><img src="https://static.rustore.ru/imgproxy/_8ypWpuzBPq7cF3jlZ01m5LCxlTgaYEa9EZB22TScc4/preset:vk_og_img/plain/https://static.rustore.ru/apk/2063541439/content/ICON/6fc5feaf-001c-41ab-ad45-fdfb43ffc53d.jpg@webp" alt="" onerror="this.replaceWith(Object.assign(document.createElement('b'), { className: 'social-icon-text', textContent: 'ML' }))"></span>
+                    <span class="social-arrow" data-arrow></span>
+                </div>
+                <div>
+                    <p class="social-name">MangaLib</p>
+                    <p class="social-desc">Страница команды и личка для связи.</p>
+                </div>
+            </a>
         </div>
     </main>
 
-    <footer>
-        <nav class="footer-nav">
-            <a>О нас</a>
-            <a href="socials.html">Соц.сети</a>
-            <a href="faq.html">FAQ</a>
-        </nav>
-        <div class="footer-copyright">
-            &copy; 2026 WhiteLight. Все права защищены.
-        </div>
-    </footer>
+    <footer id="site-footer"></footer>
 
+    <script src="scripts/core.js"></script>
     <script>
-    const themeBtn = document.getElementById('theme-btn');
-    const rootElement = document.documentElement;
-
-    if (rootElement.classList.contains('dark-theme')) {
-        if (themeBtn) themeBtn.textContent = '☀️';
-    } else {
-        if (themeBtn) themeBtn.textContent = '🌙';
-    }
-
-    if (themeBtn) {
-        themeBtn.addEventListener('click', () => {
-            rootElement.classList.toggle('dark-theme');
-            const isDark = rootElement.classList.contains('dark-theme');
-            themeBtn.textContent = isDark ? '☀️' : '🌙';
-            localStorage.setItem('wl_theme', isDark ? 'dark' : 'light');
-        });
-    }
+    WL.renderChrome('socials');
+    document.querySelectorAll('[data-arrow]').forEach(el => { el.innerHTML = WL.icon('arrowRight'); });
+    WL.reveal();
     </script>
 </body>
 </html>
