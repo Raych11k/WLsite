@@ -1,21 +1,20 @@
 --[[
 	PRESS2DIE — GameServer (Script)  ->  положить в ServerScriptService
 
-	Проклятая игровая приставка 90-х, внутри которой заперты люди.
-	Асимметричный хоррор 1 vs все: один Палач против до 6 выживших.
+	Асимметричный хоррор 1 vs все. Лор: люди заперты в проклятой приставке 90-х,
+	но сама игра идёт в мрачных «классических» локациях — цифровая природа мира
+	лишь угадывается (глитчи, ЭЛТ-телевизоры, помехи).
 
-	Сервер строит всё кодом и ведёт игру:
-	  • ЛОББИ «внутри приставки»: материнская плата, чипы, радиатор, шлейф,
-	    большой экран статуса и 4 картриджа-платформы для голосования за уровень;
-	  • СЦЕНА ВЫБОРА: 6 подиумов P1..P6 с прожекторами (выжившие встают на сцену
-	    слева направо в порядке выбора) и монитор, который опускается, когда
-	    Палач выбрал облик;
-	  • 4 КАРТРИДЖА-КАРТЫ: «Холмы радости», «Аркада «Полночь»», «Лабиринт 8-бит»
-	    (стены перестраиваются каждый матч) и «Детская 1996» (выжившие крошечные);
-	  • МАТЧ: жетоны открывают выход раньше времени, 3 Палача со способностями,
-	    выносливость и бег, бонус времени за убийство, итоги матча.
-
-	Клиентский интерфейс — в GameClient (LocalScript).
+	Сервер строит всё кодом:
+	  • ЛОББИ — заброшенный автокинотеатр в ночном лесу, экран показывает статус;
+	  • СЦЕНА ВЫБОРА — старый театр: 6 подиумов с прожекторами, монитор Палача;
+	  • КАРТЫ — «Туманный лес», «Комплекс» (завод, полностью закрытый), «Ферма» на закате.
+	    Края скрыты холмами, лесом, туманом или стенами; выходы — ворота и двери в стенах,
+	    которые открываются, когда до конца матча остаётся минута;
+	  • ПЕРСОНАЖИ — мультяшные «костюмы» поверх аватара; роли выживших:
+	    станнеры (Алекс, Айша), поддержка (Лилиан, Грег), одиночки (Оскар, Феликс);
+	  • МАТЧ — способности (Q) у всех, оглушение Палача, выносливость, итоги, наблюдение.
+	Интерфейс — в GameClient (LocalScript).
 ]]
 
 local Players = game:GetService("Players")
@@ -25,6 +24,7 @@ local Lighting = game:GetService("Lighting")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local CollectionService = game:GetService("CollectionService")
+local Debris = game:GetService("Debris")
 
 ------------------------------------------------------------------------
 -- НАСТРОЙКИ
@@ -35,7 +35,7 @@ local CONFIG = {
 	LOBBY_COUNTDOWN = 30,     -- секунд лобби до старта
 	BASE_MATCH_TIME = 60,     -- матч = 60 c + 60 c * число выживших
 	TIME_PER_SURVIVOR = 60,
-	ESCAPE_OPEN_AT = 60,      -- выход открывается сам, когда до конца осталось <= 60 c
+	ESCAPE_OPEN_AT = 60,      -- выход открывается, когда до конца осталось <= 60 c
 	ESCAPE_RADIUS = 7,        -- радиус зоны выхода
 	ENDING_TIME = 9,          -- экран итогов перед возвратом в лобби
 	SELECT_TIME = 25,         -- секунд на выбор персонажа
@@ -54,40 +54,39 @@ local CONFIG = {
 	STAMINA_REGEN = 14,
 	STAMINA_REGEN_DELAY = 1.5,
 	STAMINA_RECOVER_FRACTION = 0.25,
-	HIT_BOOST_MULT = 1.35,
+	HIT_BOOST_MULT = 1.35,    -- ускорение после удара / от «Бумбокса» / «Дымовухи»
 	HIT_BOOST_TIME = 3,
 	KILLER_DAMAGE = 34,       -- 3 удара убивают обычного выжившего
 	KILLER_RANGE = 8,
 	KILLER_COOLDOWN = 1.2,
 	DASH_SPEED = 62,          -- скорость Палача во время «Рывка»
-	ABILITY_FIRST_DELAY = 8,  -- способность Палача готова через N секунд после старта
-	TOKEN_RADIUS = 4.5,       -- радиус подбора жетона
-	TOKENS_BASE = 2,          -- нужно жетонов = 2 + 2 за каждого выжившего (не больше 12)
-	TOKENS_PER_SURVIVOR = 2,
-	TOKENS_MAX = 12,
-	TOKENS_EXTRA = 4,         -- запасные жетоны на карте
-	TOKEN_OPEN_CAP = 75,      -- после сбора всех жетонов до конца матча остаётся не больше N секунд
-	LOBBY_POS = Vector3.new(0, 300, 0),
+	KILLER_FIRST_ABILITY = 8, -- способность готова через N секунд после старта
+	SURVIVOR_FIRST_ABILITY = 12,
+	STUN_IMMUNITY = 6,        -- после оглушения Палач N секунд не оглушается снова
+	FLASH_RANGE = 22,         -- «Вспышка» Алекса
+	PUNCH_RANGE = 8,          -- «Апперкот» Айши
+	SUPPORT_RADIUS = 18,      -- радиус «Аптечки» и «Бумбокса»
+	LOBBY_POS = Vector3.new(-3000, 0, 0),
 	STAGE_POS = Vector3.new(0, 900, -3000),
 }
 
 local M = Enum.Material
 local rng = Random.new()
 local VERT = CFrame.Angles(0, 0, math.rad(90))   -- ставит цилиндр вертикально
-local ALONG_Z = CFrame.Angles(0, math.rad(90), 0) -- ось цилиндра вдоль Z
+local ALONG_Z = CFrame.Angles(0, math.rad(90), 0) -- ось цилиндра вдоль Z (lookAt)
 local DOOR_H = 9
 local NOCOL = { CanCollide = false, CanQuery = false, CastShadow = false }
 local FLAT = { CanCollide = false, CanQuery = false, CastShadow = false, CanTouch = false }
-
-local GOLD = Color3.fromRGB(255, 196, 60)
-local GREEN = Color3.fromRGB(80, 255, 120)
-local BLOOD = Color3.fromRGB(190, 26, 32)
-local PLASTIC = Color3.fromRGB(150, 148, 156)
-local PLASTIC_DARK = Color3.fromRGB(38, 37, 43)
+local CYL = Enum.PartType.Cylinder
+local BALL = Enum.PartType.Ball
 local BLACK = Color3.new(0, 0, 0)
+local WHITE = Color3.new(1, 1, 1)
+local GREEN = Color3.fromRGB(80, 255, 120)
+local LAMP_RED = Color3.fromRGB(255, 50, 40)
+local Terrain = Workspace:FindFirstChildOfClass("Terrain")
 
 ------------------------------------------------------------------------
--- ОКРУЖЕНИЕ: очистка шаблона, базовое освещение (пресеты по зонам ставит клиент)
+-- ОКРУЖЕНИЕ
 ------------------------------------------------------------------------
 for _, o in ipairs(Workspace:GetChildren()) do
 	if o:IsA("SpawnLocation") or o.Name == "Baseplate" then o:Destroy() end
@@ -95,24 +94,37 @@ end
 
 Lighting.ClockTime = 0
 Lighting.Brightness = 1
-Lighting.Ambient = Color3.fromRGB(40, 46, 52)
-Lighting.OutdoorAmbient = Color3.fromRGB(40, 46, 60)
+Lighting.Ambient = Color3.fromRGB(40, 44, 52)
+Lighting.OutdoorAmbient = Color3.fromRGB(36, 40, 56)
 Lighting.FogColor = Color3.fromRGB(8, 10, 14)
-Lighting.FogStart = 60
-Lighting.FogEnd = 420
+Lighting.FogStart = 40
+Lighting.FogEnd = 300
 do
 	local atm = Lighting:FindFirstChildOfClass("Atmosphere")
 	if not atm then
 		atm = Instance.new("Atmosphere")
 		atm.Parent = Lighting
 	end
-	atm.Density = 0.3
-	atm.Offset = 0.2
+	atm.Density = 0.35
+	atm.Offset = 0.1
 	atm.Color = Color3.fromRGB(40, 45, 60)
 	atm.Decay = Color3.fromRGB(20, 20, 30)
-	atm.Haze = 1.5
+	atm.Haze = 2
 end
 Players.RespawnTime = 3
+
+-- цвета материалов ландшафта (общие для всех карт, поэтому у каждой карты свои материалы)
+if Terrain then
+	pcall(function()
+		Terrain:SetMaterialColor(M.Grass, Color3.fromRGB(34, 48, 30))       -- лес / лобби
+		Terrain:SetMaterialColor(M.Mud, Color3.fromRGB(52, 42, 32))         -- лесные тропы
+		Terrain:SetMaterialColor(M.Rock, Color3.fromRGB(58, 58, 62))        -- скалы
+		Terrain:SetMaterialColor(M.Ground, Color3.fromRGB(96, 74, 48))      -- дорожки фермы
+		Terrain:SetMaterialColor(M.LeafyGrass, Color3.fromRGB(124, 104, 58)) -- сухая трава фермы
+		Terrain:SetMaterialColor(M.Asphalt, Color3.fromRGB(34, 34, 38))     -- площадка кинотеатра
+		Terrain:SetMaterialColor(M.Sandstone, Color3.fromRGB(110, 84, 58))  -- холмы фермы
+	end)
+end
 
 ------------------------------------------------------------------------
 -- РЕПЛИЦИРУЕМОЕ СОСТОЯНИЕ (читает клиент)
@@ -135,8 +147,8 @@ local announceEvent = remote("Announce")      -- (text, kind)
 local sprintEvent = remote("Sprint")          -- клиент: держу Shift
 local pickEvent = remote("PickCharacter")     -- клиент: выбираю персонажа
 local pickStateEvent = remote("PickState")    -- сервер: (мой выбор, моя роль)
-local abilityEvent = remote("Ability")        -- клиент: способность Палача
-local fxEvent = remote("Fx")                  -- сервер: эффекты (жетон, помехи, подсветка...)
+local abilityEvent = remote("Ability")        -- клиент: способность (Q)
+local fxEvent = remote("Fx")                  -- сервер: эффекты для конкретного игрока
 local resultsEvent = remote("Results")        -- сервер: итоги матча
 local spectateEvent = remote("Spectate")      -- клиент: за кем наблюдаю (для стриминга)
 
@@ -148,11 +160,7 @@ gameState:SetAttribute("Roster", "[]")
 gameState:SetAttribute("Killer", "{}")
 gameState:SetAttribute("Stage", "{}")
 gameState:SetAttribute("Taken", "[]")
-gameState:SetAttribute("Votes", "{}")
 gameState:SetAttribute("MapKey", "")
-gameState:SetAttribute("Tokens", 0)
-gameState:SetAttribute("TokensNeeded", 0)
-gameState:SetAttribute("ExitName", "")
 gameState:SetAttribute("SelectLocked", false)
 gameState:SetAttribute("BonusSeq", 0)
 gameState:SetAttribute("StageCenter", CONFIG.STAGE_POS)
@@ -198,11 +206,30 @@ end
 -- вертикальный цилиндр высотой h и диаметром d с центром в pos
 local function cyl(parent, name, h, d, pos, color, mat, opts)
 	local cf = typeof(pos) == "Vector3" and CFrame.new(pos) or pos
-	return mk(parent, name, Vector3.new(h, d, d), cf * VERT, color, mat, withShape(opts, Enum.PartType.Cylinder))
+	return mk(parent, name, Vector3.new(h, d, d), cf * VERT, color, mat, withShape(opts, CYL))
 end
 
 local function ball(parent, name, d, pos, color, mat, opts)
-	return mk(parent, name, Vector3.new(d, d, d), pos, color, mat, withShape(opts, Enum.PartType.Ball))
+	return mk(parent, name, Vector3.new(d, d, d), pos, color, mat, withShape(opts, BALL))
+end
+
+-- деталь по двум углам относительно точки o
+local function box(parent, o, name, x1, x2, y1, y2, z1, z2, color, mat, opts)
+	return mk(parent, name, Vector3.new(x2 - x1, y2 - y1, z2 - z1),
+		o + Vector3.new((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2), color, mat, opts)
+end
+
+-- деталь-отрезок между двумя точками (балки, ножки, тросы)
+local function beam(parent, name, a, b, th, color, mat, opts)
+	local len = (b - a).Magnitude
+	local mid = (a + b) / 2
+	local cf
+	if math.abs((b - a).Unit.Y) > 0.999 then
+		cf = CFrame.new(mid)
+	else
+		cf = CFrame.lookAt(mid, b) * CFrame.Angles(math.rad(90), 0, 0)
+	end
+	return mk(parent, name, Vector3.new(th, len, th), cf, color, mat, opts)
 end
 
 local function tag(inst, name, attrs)
@@ -211,55 +238,6 @@ local function tag(inst, name, attrs)
 		for k, v in pairs(attrs) do inst:SetAttribute(k, v) end
 	end
 	return inst
-end
-
-local function wallSeg(parent, a, b, h, thick, color, mat)
-	local len = (b - a).Magnitude
-	if len < 0.05 then return end
-	local alongX = math.abs(b.X - a.X) > math.abs(b.Z - a.Z)
-	local size = alongX and Vector3.new(len, h, thick) or Vector3.new(thick, h, len)
-	mk(parent, "Wall", size, (a + b) / 2 + Vector3.new(0, h / 2, 0), color, mat)
-end
-
--- стена от a до b (оси X или Z), опционально с дверным проёмом по центру
-local function wall(parent, a, b, h, thick, color, mat, doorW)
-	if not doorW then
-		wallSeg(parent, a, b, h, thick, color, mat)
-		return
-	end
-	local dir = (b - a).Unit
-	local half = ((b - a).Magnitude - doorW) / 2
-	wallSeg(parent, a, a + dir * half, h, thick, color, mat)
-	wallSeg(parent, b - dir * half, b, h, thick, color, mat)
-	if h > DOOR_H then
-		local alongX = math.abs(b.X - a.X) > math.abs(b.Z - a.Z)
-		local lh = h - DOOR_H
-		local size = alongX and Vector3.new(doorW, lh, thick) or Vector3.new(thick, lh, doorW)
-		mk(parent, "Lintel", size, (a + b) / 2 + Vector3.new(0, DOOR_H + lh / 2, 0), color, mat)
-	end
-end
-
--- комната: 4 стены, крыша, лампа. doors = {N=true,S=true,W=true,E=true}
-local function room(parent, center, w, d, h, color, mat, doors, doorW, lampColor)
-	doorW = doorW or 8
-	local t = 2
-	local x1, x2 = center.X - w / 2, center.X + w / 2
-	local z1, z2 = center.Z - d / 2, center.Z + d / 2
-	local y = center.Y
-	local function P(x, z) return Vector3.new(x, y, z) end
-	wall(parent, P(x1 - t / 2, z1), P(x2 + t / 2, z1), h, t, color, mat, doors.N and doorW)
-	wall(parent, P(x1 - t / 2, z2), P(x2 + t / 2, z2), h, t, color, mat, doors.S and doorW)
-	wall(parent, P(x1, z1), P(x1, z2), h, t, color, mat, doors.W and doorW)
-	wall(parent, P(x2, z1), P(x2, z2), h, t, color, mat, doors.E and doorW)
-	mk(parent, "Roof", Vector3.new(w + t, 1, d + t), Vector3.new(center.X, y + h + 0.5, center.Z), color, mat)
-	local lamp = mk(parent, "Lamp", Vector3.new(4, 0.5, 4), Vector3.new(center.X, y + h - 0.25, center.Z),
-		Color3.fromRGB(255, 235, 190), M.Neon, NOCOL)
-	local light = Instance.new("PointLight")
-	light.Range = math.max(w, d) * 0.8
-	light.Brightness = 1.2
-	light.Color = lampColor or Color3.fromRGB(255, 200, 140)
-	light.Parent = lamp
-	tag(lamp, "P2D_Flicker")
 end
 
 local function pointLight(part, color, range, brightness)
@@ -271,7 +249,132 @@ local function pointLight(part, color, range, brightness)
 	return l
 end
 
--- SurfaceGui с крупным текстом (PixelsPerStud подбирается под высоту грани)
+local function spotLight(part, face, color, range, angle, brightness)
+	local l = Instance.new("SpotLight")
+	l.Face = face
+	l.Color = color
+	l.Range = range
+	l.Angle = angle
+	l.Brightness = brightness
+	l.Parent = part
+	return l
+end
+
+-- приваривает декоративную деталь к опорной (двигается вместе с ней)
+local function weldTo(part, base)
+	part.Anchored = false
+	part.Massless = true
+	local w = Instance.new("WeldConstraint")
+	w.Part0 = base
+	w.Part1 = part
+	w.Parent = part
+	return part
+end
+
+local function wallSeg(parent, a, b, h, thick, color, mat)
+	local len = (b - a).Magnitude
+	if len < 0.05 then return end
+	local alongX = math.abs(b.X - a.X) > math.abs(b.Z - a.Z)
+	local size = alongX and Vector3.new(len, h, thick) or Vector3.new(thick, h, len)
+	return mk(parent, "Wall", size, (a + b) / 2 + Vector3.new(0, h / 2, 0), color, mat)
+end
+
+-- стена от a до b с проёмами: gaps = { {t = расстояние от a до центра проёма, w = ширина, h = высота} }
+local function wallWithGaps(parent, a, b, h, thick, color, mat, gaps)
+	local dir = (b - a).Unit
+	local len = (b - a).Magnitude
+	local alongX = math.abs(dir.X) > 0.5
+	table.sort(gaps, function(x, y) return x.t < y.t end)
+	local cur = 0
+	for _, g in ipairs(gaps) do
+		local s = g.t - g.w / 2
+		if s > cur then wallSeg(parent, a + dir * cur, a + dir * s, h, thick, color, mat) end
+		if h > g.h then
+			local lh = h - g.h
+			local size = alongX and Vector3.new(g.w, lh, thick) or Vector3.new(thick, lh, g.w)
+			mk(parent, "Lintel", size, a + dir * g.t + Vector3.new(0, g.h + lh / 2, 0), color, mat)
+		end
+		cur = g.t + g.w / 2
+	end
+	if cur < len then wallSeg(parent, a + dir * cur, b, h, thick, color, mat) end
+end
+
+-- прямоугольная комната (координаты относительно o) с проёмами:
+-- gaps = { N = { {c = координата центра проёма вдоль стены, w, h} }, S = ..., W = ..., E = ... }
+local function room(parent, o, x1, x2, z1, z2, h, color, mat, gaps, opts)
+	opts = opts or {}
+	gaps = gaps or {}
+	local t = opts.thick or 1.6
+	local function conv(list, start)
+		local out = {}
+		for _, g in ipairs(list or {}) do
+			table.insert(out, { t = math.abs(g.c - start), w = g.w or 7, h = g.h or DOOR_H })
+		end
+		return out
+	end
+	local y = opts.y or 0
+	local function P(x, z) return o + Vector3.new(x, y, z) end
+	wallWithGaps(parent, P(x1 - t / 2, z1), P(x2 + t / 2, z1), h, t, color, mat, conv(gaps.N, x1 - t / 2))
+	wallWithGaps(parent, P(x1 - t / 2, z2), P(x2 + t / 2, z2), h, t, color, mat, conv(gaps.S, x1 - t / 2))
+	wallWithGaps(parent, P(x1, z1), P(x1, z2), h, t, color, mat, conv(gaps.W, z1))
+	wallWithGaps(parent, P(x2, z1), P(x2, z2), h, t, color, mat, conv(gaps.E, z1))
+	if not opts.noRoof then
+		box(parent, o, "Roof", x1 - t / 2, x2 + t / 2, y + h, y + h + 1, z1 - t / 2, z2 + t / 2, opts.roofColor or color, opts.roofMat or mat)
+	end
+	if opts.lamp ~= false then
+		local lamp = box(parent, o, "Lamp", (x1 + x2) / 2 - 1.5, (x1 + x2) / 2 + 1.5, y + h - 0.4, y + h, (z1 + z2) / 2 - 1.5, (z1 + z2) / 2 + 1.5,
+			Color3.fromRGB(255, 225, 180), M.Neon, NOCOL)
+		pointLight(lamp, opts.lampColor or Color3.fromRGB(255, 190, 130), math.max(x2 - x1, z2 - z1) * 0.9, opts.lampBrightness or 1)
+		if opts.flicker then tag(lamp, "P2D_Flicker") end
+	end
+end
+
+-- двускатная крыша над прямоугольником (конёк вдоль Z, либо вдоль X при alongX)
+local function gableRoof(parent, center, w, d, rise, color, mat, alongX, over)
+	over = over or 1.5
+	local rot = alongX and CFrame.Angles(0, math.rad(90), 0) or CFrame.identity
+	if alongX then w, d = d, w end
+	local base = CFrame.new(center) * rot
+	local half = w / 2
+	local slope = math.atan2(rise, half)
+	local len = math.sqrt(half * half + rise * rise) + over
+	for _, s in ipairs({ -1, 1 }) do
+		mk(parent, "RoofSlab", Vector3.new(len, 0.7, d + over * 2),
+			base * CFrame.new(s * half / 2, rise / 2, 0) * CFrame.Angles(0, 0, -s * slope), color, mat)
+		-- фронтоны (треугольники из двух клиньев)
+		for _, e in ipairs({ -1, 1 }) do
+			mkc("WedgePart", parent, "Gable", Vector3.new(0.6, rise, half),
+				base * CFrame.new(s * half / 2, rise / 2, e * (d / 2 - 0.3)) * CFrame.Angles(0, s * math.rad(-90), 0), color:Lerp(BLACK, 0.15), mat)
+		end
+	end
+end
+
+-- клин-пандус: dir — направление ПОДЪЁМА (к верхней точке)
+local function ramp(parent, pos, w, h, len, dir, color, mat)
+	local center = pos + Vector3.new(0, h / 2, 0)
+	return mkc("WedgePart", parent, "Ramp", Vector3.new(w, h, len), CFrame.lookAt(center, center - dir), color, mat)
+end
+
+local function railing(parent, a, b, h, color)
+	local len = (b - a).Magnitude
+	if len < 0.5 then return end
+	local dir = (b - a).Unit
+	local n = math.max(1, math.floor(len / 4))
+	for i = 0, n do
+		local p = a + dir * (len * i / n)
+		mk(parent, "RailPost", Vector3.new(0.3, h, 0.3), p + Vector3.new(0, h / 2, 0), color, M.Metal)
+	end
+	local cf = CFrame.lookAt((a + b) / 2, b)
+	mk(parent, "Rail", Vector3.new(0.25, 0.25, len), cf + Vector3.new(0, h, 0), color, M.Metal)
+	mk(parent, "Rail", Vector3.new(0.2, 0.2, len), cf + Vector3.new(0, h * 0.5, 0), color, M.Metal)
+end
+
+local function ladder(parent, pos, height)
+	local h = math.max(2, math.floor(height / 2 + 0.5) * 2)
+	return mkc("TrussPart", parent, "Ladder", Vector3.new(2, h, 2), pos + Vector3.new(0, h / 2, 0), Color3.fromRGB(70, 70, 76), M.Metal)
+end
+
+-- SurfaceGui с крупным текстом
 local function faceDims(part, face)
 	local s = part.Size
 	if face == Enum.NormalId.Front or face == Enum.NormalId.Back then return s.X, s.Y end
@@ -302,14 +405,14 @@ local function surfaceText(part, face, text, o)
 	t.Font = o.font or Enum.Font.GothamBlack
 	t.TextScaled = true
 	t.TextWrapped = true
-	t.TextColor3 = o.color or Color3.new(1, 1, 1)
+	t.TextColor3 = o.color or WHITE
 	t.TextStrokeTransparency = o.stroke or 1
 	t.Text = text
 	t.Parent = sg
 	return t, sg
 end
 
--- пиксель-арт из строк: символ -> цвет палитры, «.» — пусто. Соседние пиксели склеиваются в одну деталь.
+-- пиксель-арт из строк: символ -> цвет палитры, «.» — пусто. Соседние пиксели склеиваются.
 local function pixelArt(parent, cf, rows, px, palette, depth)
 	local h = #rows
 	for r, row in ipairs(rows) do
@@ -332,133 +435,218 @@ local function pixelArt(parent, cf, rows, px, palette, depth)
 	end
 end
 
-local SKULL = {
-	"..#####..",
-	".#######.",
-	"##.###.##",
-	"#...#...#",
-	"##.###.##",
-	".#######.",
-	"..#.#.#..",
-	"..#####..",
-}
+------------------------------------------------------------------------
+-- ЛАНДШАФТ И ПРИРОДА
+------------------------------------------------------------------------
+local function terra(method, ...)
+	if not Terrain then return end
+	local args = table.pack(...)
+	pcall(function() Terrain[method](Terrain, table.unpack(args, 1, args.n)) end)
+end
+
+local groundParams = RaycastParams.new()
+groundParams.FilterType = Enum.RaycastFilterType.Include
+groundParams.FilterDescendantsInstances = Terrain and { Terrain } or {}
+-- высота поверхности ландшафта в точке (для деревьев на холмах)
+local function groundY(pos)
+	local r = Workspace:Raycast(Vector3.new(pos.X, pos.Y + 150, pos.Z), Vector3.new(0, -300, 0), groundParams)
+	return r and r.Position.Y or pos.Y
+end
+
+-- кольцо холмов вокруг игровой зоны: прячет край карты; exits = { {pos, normal} } — там прорубаются проходы
+local function hillRing(o, dist, mats, r, exits, cutW)
+	local balls = {}
+	for t = -dist - 30, dist + 30, 26 do
+		table.insert(balls, Vector3.new(t, 0, -dist))
+		table.insert(balls, Vector3.new(t, 0, dist))
+		table.insert(balls, Vector3.new(-dist, 0, t))
+		table.insert(balls, Vector3.new(dist, 0, t))
+	end
+	for _, b in ipairs(balls) do
+		local rad = r:NextNumber(34, 44)
+		terra("FillBall", o + Vector3.new(b.X + r:NextNumber(-6, 6), -12 + r:NextNumber(-4, 4), b.Z + r:NextNumber(-6, 6)), rad, mats[r:NextInteger(1, #mats)])
+	end
+	-- проходы к воротам: дорога уходит в «туман» и упирается в дальний холм
+	for _, e in ipairs(exits or {}) do
+		local n = e.normal
+		local size = Vector3.new(n.X ~= 0 and 90 or (cutW or 20), 60, n.Z ~= 0 and 90 or (cutW or 20))
+		local c = o + e.pos - n * 45
+		terra("FillBlock", CFrame.new(c.X, 30, c.Z), size, M.Air)
+		terra("FillBall", o + e.pos - n * 105, 34, mats[1])
+	end
+end
+
+local TRUNK = Color3.fromRGB(56, 40, 30)
+local PINE = Color3.fromRGB(26, 44, 30)
+
+-- ель из двух перекрещенных «А-образных» ярусов (низкополигональный силуэт)
+local function pine(parent, pos, h, r, tiers)
+	tiers = tiers or 3
+	local trunkH = h * 0.5
+	cyl(parent, "PineTrunk", trunkH, math.max(1, h * 0.05), pos + Vector3.new(0, trunkH / 2, 0), TRUNK, M.Wood)
+	local col = PINE:Lerp(Color3.fromRGB(12, 26, 22), r:NextNumber(0, 0.6))
+	local yaw0 = r:NextNumber(0, math.pi)
+	for i = 1, tiers do
+		local k = 1 - (i - 1) / (tiers + 0.5)
+		local w = h * 0.46 * k
+		local th = h * 0.42 * k
+		local y = h * 0.22 + (i - 1) * h * 0.22 + th / 2
+		for j = 0, 1 do
+			local base = CFrame.new(pos + Vector3.new(0, y, 0)) * CFrame.Angles(0, yaw0 + j * math.pi / 2 + i * 0.4, 0)
+			local size = Vector3.new(w * 0.55, th, w / 2)
+			mkc("WedgePart", parent, "Needles", size, base * CFrame.new(0, 0, -w / 4), col, M.Grass, NOCOL)
+			mkc("WedgePart", parent, "Needles", size, base * CFrame.new(0, 0, w / 4) * CFrame.Angles(0, math.pi, 0), col, M.Grass, NOCOL)
+		end
+	end
+end
+
+-- лиственное дерево: ствол + шапка из шаров
+local function leafTree(parent, pos, h, r, palette)
+	cyl(parent, "Trunk", h * 0.62, math.max(1, h * 0.07), pos + Vector3.new(0, h * 0.31, 0), Color3.fromRGB(64, 46, 32), M.Wood)
+	beam(parent, "Branch", pos + Vector3.new(0, h * 0.45, 0), pos + Vector3.new(h * 0.18, h * 0.62, h * 0.05), h * 0.035, Color3.fromRGB(64, 46, 32), M.Wood)
+	for _ = 1, 5 do
+		local d = h * r:NextNumber(0.3, 0.46)
+		local off = Vector3.new(r:NextNumber(-0.22, 0.22) * h, h * r:NextNumber(0.6, 0.88), r:NextNumber(-0.22, 0.22) * h)
+		ball(parent, "Leaves", d, pos + off, palette[r:NextInteger(1, #palette)], M.Grass, NOCOL)
+	end
+end
+
+local function bush(parent, pos, r, col)
+	for _ = 1, 3 do
+		local d = r:NextNumber(2.5, 4.5)
+		ball(parent, "Bush", d, pos + Vector3.new(r:NextNumber(-1.5, 1.5), d * 0.3, r:NextNumber(-1.5, 1.5)), col, M.Grass, NOCOL)
+	end
+end
+
+local function boulder(parent, pos, s, r)
+	mk(parent, "Boulder", Vector3.new(s, s * 0.7, s * 1.1),
+		CFrame.new(pos + Vector3.new(0, s * 0.2, 0)) * CFrame.Angles(r:NextNumber(0, 3), r:NextNumber(0, 6), r:NextNumber(0, 1)),
+		Color3.fromRGB(78, 78, 82), M.Slate)
+end
+
+-- прожектор на треноге (две панели), направлен на target
+local function floodlight(parent, pos, target, color)
+	color = color or Color3.fromRGB(200, 240, 255)
+	local hub = pos + Vector3.new(0, 3, 0)
+	for k = 0, 2 do
+		local a = k * math.pi * 2 / 3
+		beam(parent, "TripodLeg", hub, pos + Vector3.new(math.cos(a) * 2.2, 0, math.sin(a) * 2.2), 0.18, Color3.fromRGB(70, 74, 60), M.Metal)
+	end
+	beam(parent, "TripodPole", hub, pos + Vector3.new(0, 7.5, 0), 0.22, Color3.fromRGB(70, 74, 60), M.Metal)
+	local top = pos + Vector3.new(0, 7.6, 0)
+	local flat = Vector3.new(target.X - pos.X, 0, target.Z - pos.Z)
+	local right = flat.Magnitude > 0.1 and Vector3.new(-flat.Z, 0, flat.X).Unit or Vector3.new(1, 0, 0)
+	mk(parent, "Crossbar", Vector3.new(0.18, 0.18, 3.2), CFrame.lookAt(top, top + right), Color3.fromRGB(70, 74, 60), M.Metal)
+	for _, s in ipairs({ -1, 1 }) do
+		local p = top + right * (s * 1)
+		local cf = CFrame.lookAt(p, target)
+		mk(parent, "LampHousing", Vector3.new(1.5, 1.2, 0.5), cf, Color3.fromRGB(30, 32, 34), M.Metal)
+		local lens = mk(parent, "LampLens", Vector3.new(1.3, 1, 0.1), cf * CFrame.new(0, 0, -0.28), color, M.Neon, NOCOL)
+		spotLight(lens, Enum.NormalId.Front, color, 55, 55, 2.6)
+	end
+end
+
+local function crate(parent, pos, s, yaw, col)
+	return mk(parent, "Crate", Vector3.new(s, s, s), CFrame.new(pos + Vector3.new(0, s / 2, 0)) * CFrame.Angles(0, yaw or 0, 0),
+		col or Color3.fromRGB(120, 90, 55), M.WoodPlanks)
+end
+
+local function barrel(parent, pos, col)
+	cyl(parent, "Barrel", 3.6, 2.6, pos + Vector3.new(0, 1.8, 0), col or Color3.fromRGB(130, 30, 26), M.Metal)
+end
+
+local function pallet(parent, pos, yaw)
+	local cf = CFrame.new(pos) * CFrame.Angles(0, yaw or 0, 0)
+	for k = -1, 1 do
+		mk(parent, "PalletBoard", Vector3.new(4.4, 0.25, 1), cf * CFrame.new(0, 0.6, k * 1.6), Color3.fromRGB(190, 170, 130), M.WoodPlanks)
+		mk(parent, "PalletBlock", Vector3.new(4.4, 0.5, 0.6), cf * CFrame.new(0, 0.25, k * 1.6), Color3.fromRGB(160, 140, 105), M.WoodPlanks)
+	end
+end
+
+-- старая легковушка (cf — центр на земле, LookVector — вперёд)
+local function car(parent, cf, col)
+	mk(parent, "CarBody", Vector3.new(6, 2.6, 13), cf * CFrame.new(0, 2.1, 0), col, M.Metal)
+	mk(parent, "CarCabin", Vector3.new(5.4, 2.2, 6.5), cf * CFrame.new(0, 4.5, 0.6), col:Lerp(BLACK, 0.2), M.Metal)
+	mk(parent, "CarGlass", Vector3.new(5.5, 1.6, 6.6), cf * CFrame.new(0, 4.6, 0.6), Color3.fromRGB(20, 24, 30), M.Glass, { Transparency = 0.3 })
+	for _, w in ipairs({ { -3, -4.2 }, { 3, -4.2 }, { -3, 4.2 }, { 3, 4.2 } }) do
+		mk(parent, "Wheel", Vector3.new(1.2, 2.6, 2.6), cf * CFrame.new(w[1], 1.3, w[2]), Color3.fromRGB(18, 18, 18), M.SmoothPlastic, { Shape = CYL })
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		mk(parent, "Headlight", Vector3.new(1, 0.6, 0.2), cf * CFrame.new(s * 2.1, 2.4, -6.55), Color3.fromRGB(255, 240, 200), M.Neon, NOCOL)
+	end
+end
 
 ------------------------------------------------------------------------
--- ПЕРСОНАЖИ: 6 выживших + 3 Палача. Один персонаж = один игрок.
+-- ПЕРСОНАЖИ: 6 выживших (3 роли по 2) + 3 Палача. Один персонаж = один игрок.
 -- Пипсы 1..5 (3 = базовое значение). У выживших hp/speed/stamina, у Палачей power/speed/stamina.
 ------------------------------------------------------------------------
+local ROLES = {
+	stun = { name = "СТАННЕР", color = { 255, 212, 40 } },
+	support = { name = "ПОДДЕРЖКА", color = { 70, 230, 120 } },
+	lone = { name = "ВЫЖИВАЛЬЩИК", color = { 255, 128, 36 } },
+	killer = { name = "ПАЛАЧ", color = { 230, 40, 40 } },
+}
+gameState:SetAttribute("Roles", HttpService:JSONEncode(ROLES))
+
 local CHARACTERS = {
-	{ id = "alex", name = "Алекс", role = "Школьник", killer = false, color = { 86, 156, 214 },
+	{ id = "alex", name = "Алекс", group = "stun", role = "Фотограф-тинейджер", killer = false, color = { 60, 130, 240 },
 		hp = 3, speed = 3, stamina = 3,
-		desc = "Первым вставил картридж — первым и пропал. Ровный во всём." },
-	{ id = "oscar", name = "Оскар", role = "Мастер по ремонту", killer = false, color = { 150, 110, 70 },
-		hp = 5, speed = 2, stamina = 3,
-		desc = "Чинил приставки на радиорынке. Выдержит лишний удар, но бегает медленно." },
-	{ id = "lilian", name = "Лилиан", role = "Спидраннерша", killer = false, f = true, color = { 190, 90, 160 },
-		hp = 2, speed = 4, stamina = 4,
-		desc = "Знает каждый баг уровня. Быстрая и выносливая, но хрупкая." },
-	{ id = "greg", name = "Грег", role = "Продавец картриджей", killer = false, color = { 110, 160, 90 },
-		hp = 4, speed = 3, stamina = 2,
-		desc = "Торговал «999 игр в 1». Держит удар, но быстро выдыхается." },
-	{ id = "aisha", name = "Айша", role = "Чемпионка аркад", killer = false, f = true, color = { 230, 160, 60 },
+		desc = "Не расстаётся с «Полароидом». Вспышка в лицо сбивает Палача с толку.",
+		ability = { id = "flash", name = "ВСПЫШКА", cd = 30, dur = 0, text = "Ослепляет Палача перед тобой (до 22 м) на 2.5 с" } },
+	{ id = "aisha", name = "Айша", f = true, group = "stun", role = "Аркадная бойчиха", killer = false, color = { 240, 120, 30 },
 		hp = 2, speed = 5, stamina = 3,
-		desc = "Рекорд в каждом автомате. Самая быстрая из запертых." },
-	{ id = "felix", name = "Феликс", role = "Бета-тестер", killer = false, color = { 150, 120, 220 },
+		desc = "Чемпионка файтингов с района. Подпусти Палача вплотную — и апперкот.",
+		ability = { id = "punch", name = "АППЕРКОТ", cd = 35, dur = 0, text = "Оглушает Палача вплотную (до 8 м) на 3.5 с" } },
+	{ id = "lilian", name = "Лилиан", f = true, group = "support", role = "Полевой медик", killer = false, color = { 235, 110, 180 },
+		hp = 2, speed = 4, stamina = 4,
+		desc = "Таскает аптечку больше себя. Держит команду на ногах.",
+		ability = { id = "heal", name = "АПТЕЧКА", cd = 40, dur = 0, text = "Лечит союзников рядом на 35, себя — на 15" } },
+	{ id = "greg", name = "Грег", group = "support", role = "Диджей с бумбоксом", killer = false, color = { 70, 170, 90 },
+		hp = 4, speed = 3, stamina = 2,
+		desc = "Его бумбокс поднимет на ноги кого угодно. Почти.",
+		ability = { id = "boombox", name = "БУМБОКС", cd = 35, dur = 4, text = "Союзникам рядом — полная выносливость и ускорение" } },
+	{ id = "oscar", name = "Оскар", group = "lone", role = "Шахтёр-громила", killer = false, color = { 150, 100, 60 },
+		hp = 5, speed = 2, stamina = 3,
+		desc = "Никому не доверяет. Залатает себя сам и пойдёт дальше.",
+		ability = { id = "bandage", name = "ПЕРЕВЯЗКА", cd = 45, dur = 3, text = "Восстанавливает себе 45 здоровья за 3 с" } },
+	{ id = "felix", name = "Феликс", group = "lone", role = "Сталкер-параноик", killer = false, color = { 120, 130, 70 },
 		hp = 3, speed = 3, stamina = 4,
-		desc = "Тестировал PRESS2DIE до релиза. Знает, когда бежать." },
-	{ id = "executioner", name = "Палач", role = "Хозяин картриджа", killer = true, color = { 200, 30, 30 },
+		desc = "Противогаз, рюкзак и дымовуха на любой случай.",
+		ability = { id = "smoke", name = "ДЫМОВУХА", cd = 35, dur = 3, text = "Облако дыма и рывок на 3 с" } },
+	{ id = "executioner", name = "Палач", group = "killer", role = "Мясник с мешком", killer = true, color = { 200, 30, 30 },
 		power = 4, speed = 3, stamina = 4,
-		desc = "Ржавый тесак и рывок на добычу. Догоняет на прямой.",
+		desc = "Мешок на голове, тесак в руке. Рывком сокращает дистанцию.",
 		ability = { id = "dash", name = "РЫВОК", cd = 14, dur = 0.55, text = "Мгновенный рывок вперёд" } },
-	{ id = "glitch", name = "Сбой", role = "Ошибка в коде", killer = true, color = { 70, 210, 235 },
+	{ id = "glitch", name = "Сбой", group = "killer", role = "Человек-телевизор", killer = true, color = { 70, 210, 235 },
 		power = 3, speed = 3, stamina = 4,
 		desc = "Экраны идут помехами — и Сбой видит всех сквозь стены.",
 		ability = { id = "reveal", name = "ПОМЕХИ", cd = 24, dur = 5, text = "5 с видит всех выживших сквозь стены" } },
-	{ id = "binky", name = "Бинки", role = "Талисман приставки", killer = true, color = { 150, 80, 220 },
+	{ id = "binky", name = "Бинки", group = "killer", role = "Талисман-маскот", killer = true, color = { 150, 80, 220 },
 		power = 3, speed = 4, stamina = 3,
-		desc = "Улыбается с коробки. Исчезает и появляется за спиной.",
+		desc = "Улыбается с коробки от приставки. Исчезает и появляется за спиной.",
 		ability = { id = "vanish", name = "ПРЯТКИ", cd = 26, dur = 6, text = "6 с невидимости, удар раскрывает" } },
 }
 local CHAR_BY_ID = {}
 for _, c in ipairs(CHARACTERS) do CHAR_BY_ID[c.id] = c end
 gameState:SetAttribute("Characters", HttpService:JSONEncode(CHARACTERS))
 
-local function charColor(c) return Color3.fromRGB(c.color[1], c.color[2], c.color[3]) end
+local function rgb(t) return Color3.fromRGB(t[1], t[2], t[3]) end
+local function charColor(c) return rgb(c.color) end
+local function roleColor(c) return rgb(ROLES[c.group or "stun"].color) end
 
--- снаряжение на голове (детали приварены к Head)
+------------------------------------------------------------------------
+-- КОСТЮМЫ: мультяшные гротескные силуэты поверх аватара (части приварены к телу,
+-- поэтому повторяют любые анимации; исходное тело прячется). Работает с R15 и R6.
+------------------------------------------------------------------------
 local function V(x, y, z) return Vector3.new(x, y, z) end
 local CF = CFrame.new
-local CYL = Enum.PartType.Cylinder
-local BALL = Enum.PartType.Ball
-local GEAR = {
-	alex = function(add, u)
-		add("Cap", V(0.34 * u, 1.06 * u, 1.06 * u), CF(0, 0.42 * u, 0) * VERT, Color3.fromRGB(40, 90, 200), M.SmoothPlastic, CYL)
-		add("Brim", V(0.8 * u, 0.08 * u, 0.5 * u), CF(0, 0.32 * u, 0.66 * u), Color3.fromRGB(28, 60, 140))
-	end,
-	oscar = function(add, u)
-		add("Hat", V(0.42 * u, 1.12 * u, 1.12 * u), CF(0, 0.46 * u, 0) * VERT, Color3.fromRGB(230, 190, 40), M.SmoothPlastic, CYL)
-		add("HatBrim", V(0.08 * u, 1.45 * u, 1.45 * u), CF(0, 0.28 * u, 0) * VERT, Color3.fromRGB(200, 160, 30), M.SmoothPlastic, CYL)
-		add("Headlamp", V(0.18 * u, 0.26 * u, 0.26 * u), CF(0, 0.48 * u, -0.6 * u) * ALONG_Z, Color3.fromRGB(255, 250, 220), M.Neon, CYL)
-		add("Mustache", V(0.55 * u, 0.12 * u, 0.08 * u), CF(0, -0.18 * u, -0.54 * u), Color3.fromRGB(70, 44, 26))
-	end,
-	lilian = function(add, u)
-		add("Hair", V(1.0 * u, 0.95 * u, 0.32 * u), CF(0, -0.08 * u, 0.5 * u), Color3.fromRGB(70, 30, 60))
-		add("Band", V(1.2 * u, 0.12 * u, 0.2 * u), CF(0, 0.6 * u, 0), Color3.fromRGB(230, 90, 170))
-		add("CupL", V(0.24 * u, 0.52 * u, 0.52 * u), CF(-0.6 * u, 0.02 * u, 0), Color3.fromRGB(230, 90, 170), M.SmoothPlastic, CYL)
-		add("CupR", V(0.24 * u, 0.52 * u, 0.52 * u), CF(0.6 * u, 0.02 * u, 0), Color3.fromRGB(230, 90, 170), M.SmoothPlastic, CYL)
-	end,
-	greg = function(add, u)
-		add("Shades", V(0.98 * u, 0.2 * u, 0.08 * u), CF(0, 0.08 * u, -0.53 * u), Color3.fromRGB(10, 10, 12), M.Glass)
-		add("Cap", V(0.24 * u, 1.08 * u, 1.08 * u), CF(0, 0.5 * u, 0) * VERT, Color3.fromRGB(90, 110, 60), M.SmoothPlastic, CYL)
-		add("Brim", V(0.85 * u, 0.06 * u, 0.45 * u), CF(0, 0.42 * u, -0.6 * u), Color3.fromRGB(70, 88, 46))
-	end,
-	aisha = function(add, u)
-		add("Headband", V(0.16 * u, 1.1 * u, 1.1 * u), CF(0, 0.26 * u, 0) * VERT, Color3.fromRGB(255, 150, 40), M.Neon, CYL)
-		add("Bun", V(0.5 * u, 0.5 * u, 0.5 * u), CF(0, 0.32 * u, 0.62 * u), Color3.fromRGB(40, 25, 20), M.SmoothPlastic, BALL)
-		add("Tail", V(0.38 * u, 0.38 * u, 0.38 * u), CF(0, 0, 0.8 * u), Color3.fromRGB(40, 25, 20), M.SmoothPlastic, BALL)
-	end,
-	felix = function(add, u)
-		add("Beanie", V(0.32 * u, 1.08 * u, 1.08 * u), CF(0, 0.48 * u, 0) * VERT, Color3.fromRGB(150, 120, 220), M.SmoothPlastic, CYL)
-		add("Stripe", V(0.1 * u, 1.1 * u, 1.1 * u), CF(0, 0.4 * u, 0) * VERT, Color3.fromRGB(255, 210, 60), M.SmoothPlastic, CYL)
-		add("Stem", V(0.3 * u, 0.08 * u, 0.08 * u), CF(0, 0.76 * u, 0) * VERT, Color3.fromRGB(120, 120, 130), M.Metal, CYL)
-		add("BladeA", V(1.0 * u, 0.04 * u, 0.16 * u), CF(0, 0.9 * u, 0), Color3.fromRGB(230, 50, 50))
-		add("BladeB", V(0.16 * u, 0.04 * u, 1.0 * u), CF(0, 0.9 * u, 0), Color3.fromRGB(255, 210, 60))
-		add("LensL", V(0.06 * u, 0.34 * u, 0.34 * u), CF(-0.21 * u, 0.06 * u, -0.55 * u) * ALONG_Z, Color3.fromRGB(20, 20, 24), M.SmoothPlastic, CYL)
-		add("LensR", V(0.06 * u, 0.34 * u, 0.34 * u), CF(0.21 * u, 0.06 * u, -0.55 * u) * ALONG_Z, Color3.fromRGB(20, 20, 24), M.SmoothPlastic, CYL)
-	end,
-	executioner = function(add, u)
-		add("Hood", V(1.32 * u, 1.36 * u, 1.3 * u), CF(0, 0.08 * u, 0.04 * u), Color3.fromRGB(18, 16, 18), M.Fabric)
-		add("EyeL", V(0.26 * u, 0.08 * u, 0.06 * u), CF(-0.22 * u, 0.1 * u, -0.68 * u), Color3.fromRGB(255, 40, 30), M.Neon)
-		add("EyeR", V(0.26 * u, 0.08 * u, 0.06 * u), CF(0.22 * u, 0.1 * u, -0.68 * u), Color3.fromRGB(255, 40, 30), M.Neon)
-		add("Stitch", V(0.5 * u, 0.04 * u, 0.06 * u), CF(0, -0.28 * u, -0.68 * u), Color3.fromRGB(110, 10, 10))
-	end,
-	glitch = function(add, u)
-		add("TV", V(1.62 * u, 1.32 * u, 1.3 * u), CF(0, 0.12 * u, 0.05 * u), Color3.fromRGB(44, 44, 50))
-		local screen = add("TVScreen", V(1.28 * u, 0.98 * u, 0.06 * u), CF(0, 0.14 * u, -0.62 * u), Color3.fromRGB(120, 235, 255), M.Neon)
-		tag(screen, "P2D_Flicker", { Strong = true })
-		add("AntL", V(0.05 * u, 0.9 * u, 0.05 * u), CF(-0.28 * u, 1.12 * u, 0.05 * u) * CFrame.Angles(0, 0, math.rad(25)), Color3.fromRGB(180, 180, 190), M.Metal)
-		add("AntR", V(0.05 * u, 0.9 * u, 0.05 * u), CF(0.28 * u, 1.12 * u, 0.05 * u) * CFrame.Angles(0, 0, math.rad(-25)), Color3.fromRGB(180, 180, 190), M.Metal)
-	end,
-	binky = function(add, u)
-		for _, s in ipairs({ -1, 1 }) do
-			local ear = CF(s * 0.34 * u, 1.05 * u, 0) * CFrame.Angles(0, 0, math.rad(-12 * s))
-			add("Ear", V(0.34 * u, 1.25 * u, 0.14 * u), ear, Color3.fromRGB(150, 80, 220))
-			add("EarIn", V(0.2 * u, 0.9 * u, 0.05 * u), ear * CF(0, 0, -0.08 * u), Color3.fromRGB(255, 150, 200))
-			add("Eye", V(0.06 * u, 0.4 * u, 0.4 * u), CF(s * 0.22 * u, 0.12 * u, -0.6 * u) * ALONG_Z, Color3.fromRGB(5, 5, 5), M.SmoothPlastic, CYL)
-			add("Pupil", V(0.12 * u, 0.12 * u, 0.12 * u), CF(s * 0.22 * u, 0.12 * u, -0.64 * u), Color3.fromRGB(255, 30, 30), M.Neon, BALL)
-		end
-		add("Grin", V(0.82 * u, 0.14 * u, 0.06 * u), CF(0, -0.22 * u, -0.6 * u), Color3.fromRGB(255, 250, 240), M.Neon)
-		for _, x in ipairs({ -0.2, 0, 0.2 }) do
-			add("Tooth", V(0.03 * u, 0.14 * u, 0.07 * u), CF(x * u, -0.22 * u, -0.61 * u), Color3.fromRGB(20, 0, 0))
-		end
-	end,
-}
+local SKIN = Color3.fromRGB(232, 190, 150)
 
-local function gearPart(folder, head, name, size, offset, color, mat, shape)
+local function gearPart(folder, base, name, size, offset, color, mat, shape)
 	local p = Instance.new("Part")
 	p.Name = name
-	p.Size = size
 	if shape then p.Shape = shape end
+	p.Size = size
 	p.Color = color
 	p.Material = mat or M.SmoothPlastic
 	p.CanCollide = false
@@ -468,9 +656,9 @@ local function gearPart(folder, head, name, size, offset, color, mat, shape)
 	p.CastShadow = false
 	p.TopSurface = Enum.SurfaceType.Smooth
 	p.BottomSurface = Enum.SurfaceType.Smooth
-	p.CFrame = head.CFrame * offset
+	p.CFrame = base.CFrame * offset
 	local w = Instance.new("Weld")
-	w.Part0 = head
+	w.Part0 = base
 	w.Part1 = p
 	w.C0 = offset
 	w.Parent = p
@@ -478,58 +666,364 @@ local function gearPart(folder, head, name, size, offset, color, mat, shape)
 	return p
 end
 
--- внешний вид персонажа: цвет тела + снаряжение (одежда и аксессуары аватара убираются)
+-- мультяшные глаза: белки + зрачки (H — размер головы, y — высота глаз)
+local function eyes(add, H, y, white, pupil, gap)
+	gap = gap or 0.2
+	for _, s in ipairs({ -1, 1 }) do
+		add("EyeWhite", V(0.34 * H, 0.34 * H, 0.34 * H), CF(s * gap * H, y, -0.36 * H), white or WHITE, M.SmoothPlastic, BALL)
+		add("Pupil", V(0.15 * H, 0.15 * H, 0.15 * H), CF(s * (gap - 0.02) * H, y - 0.02 * H, -0.5 * H), pupil or BLACK, M.SmoothPlastic, BALL)
+	end
+end
+
+local COSTUME = {}
+do
+	local STUN = rgb(ROLES.stun.color)
+	local SUPPORT = rgb(ROLES.support.color)
+	local LONE = rgb(ROLES.lone.color)
+	local function C(r, g, b) return Color3.fromRGB(r, g, b) end
+
+	COSTUME.alex = { -- фотограф: колючие волосы как у героев платформеров, огромные кеды, «Полароид»
+		chest = C(40, 110, 230), chestMul = V(1.25, 1.1, 1.3), belly = C(40, 50, 90), bellyMul = V(1.2, 1.1, 1.25),
+		arm = C(40, 110, 230), armMul = 1.2, leg = C(40, 50, 90), legMul = 1.12, glove = C(240, 240, 240), gloveMul = 1.5,
+		shoe = C(230, 40, 40), shoeMul = 1.35, accent = STUN,
+		head = function(add, u)
+			local H = 1.55 * u
+			local y = (H - u) * 0.4
+			add("BigHead", V(H, H, H), CF(0, y, 0), SKIN, M.SmoothPlastic, BALL)
+			for i, a in ipairs({ -50, -25, 0, 25, 50 }) do
+				local pitch = math.rad(30 + (i % 2) * 18)
+				add("Spike", V(0.32 * H, 0.32 * H, 0.95 * H),
+					CF(0, y + 0.25 * H, 0) * CFrame.Angles(0, math.rad(a), 0) * CFrame.Angles(pitch, 0, 0) * CF(0, 0, 0.42 * H), C(255, 140, 30))
+			end
+			add("Bang", V(0.5 * H, 0.18 * H, 0.35 * H), CF(0, y + 0.4 * H, -0.3 * H) * CFrame.Angles(math.rad(-20), 0, 0), C(255, 140, 30))
+			eyes(add, H, y + 0.05 * H)
+			add("Mouth", V(0.22 * H, 0.05 * H, 0.05 * H), CF(0, y - 0.22 * H, -0.47 * H), C(90, 30, 30))
+		end,
+		extra = function(add, s, accent)
+			add("Camera", V(s.X * 0.5, s.Y * 0.36, 0.5), CF(0, s.Y * 0.08, -s.Z * 0.65 - 0.25), C(44, 44, 48))
+			add("Lens", V(0.3, 0.55, 0.55), CF(0, s.Y * 0.06, -s.Z * 0.65 - 0.55) * ALONG_Z, C(10, 10, 14), M.SmoothPlastic, CYL)
+			add("Flash", V(0.35, 0.2, 0.1), CF(-s.X * 0.17, s.Y * 0.2, -s.Z * 0.65 - 0.52), accent, M.Neon)
+			add("Strap", V(0.18, s.Y * 1.3, 0.1), CF(0, s.Y * 0.1, -s.Z * 0.66) * CFrame.Angles(0, 0, math.rad(40)), C(20, 20, 24))
+		end,
+	}
+	COSTUME.aisha = { -- бойчиха из файтинга: гигантские перчатки, высокий хвост, повязка с лентами
+		chest = C(240, 120, 30), chestMul = V(1.2, 1.05, 1.2), belly = C(28, 28, 30), bellyMul = V(1.25, 1.15, 1.25),
+		arm = C(240, 120, 30), armMul = 1.1, leg = C(235, 235, 235), legMul = 1.15, glove = C(220, 30, 30), gloveMul = 2.3,
+		shoe = C(30, 30, 30), shoeMul = 1.2, accent = STUN,
+		head = function(add, u)
+			local H = 1.45 * u
+			local y = (H - u) * 0.4
+			local skin = C(176, 124, 92)
+			add("BigHead", V(H, H, H), CF(0, y, 0), skin, M.SmoothPlastic, BALL)
+			add("Headband", V(0.16 * H, 1.04 * H, 1.04 * H), CF(0, y + 0.14 * H, 0) * VERT, C(220, 30, 30), M.SmoothPlastic, CYL)
+			for _, s in ipairs({ -1, 1 }) do
+				add("BandTail", V(0.1 * H, 0.08 * H, 0.9 * H), CF(s * 0.12 * H, y + 0.05 * H, 0.75 * H) * CFrame.Angles(math.rad(25), math.rad(s * 12), 0), C(220, 30, 30))
+				add("Brow", V(0.24 * H, 0.06 * H, 0.06 * H), CF(s * 0.2 * H, y + 0.24 * H, -0.45 * H) * CFrame.Angles(0, 0, math.rad(s * 18)), C(30, 20, 18))
+			end
+			for i, d in ipairs({ 0.55, 0.47, 0.4, 0.32 }) do
+				add("Ponytail", V(d * H, d * H, d * H), CF(0, y + (0.45 + i * 0.22) * H, (0.25 + i * 0.16) * H), C(36, 22, 18), M.SmoothPlastic, BALL)
+			end
+			eyes(add, H, y + 0.04 * H)
+			add("Mouth", V(0.2 * H, 0.05 * H, 0.05 * H), CF(0, y - 0.22 * H, -0.47 * H), C(90, 30, 30))
+		end,
+		extra = function(add, s, accent)
+			for _, x in ipairs({ -0.25, 0.25 }) do
+				add("BeltTail", V(0.3, s.Y * 0.6, 0.12), CF(x * s.X, -s.Y * 0.75, -s.Z * 0.62), C(28, 28, 30))
+			end
+			add("Badge", V(0.5, 0.5, 0.1), CF(-s.X * 0.25, s.Y * 0.2, -s.Z * 0.62), accent, M.Neon)
+		end,
+	}
+	COSTUME.lilian = { -- медик: огромный рюкзак-аптечка с крестом, шапочка, розовые пучки
+		chest = C(238, 238, 244), chestMul = V(1.2, 1.15, 1.25), belly = C(238, 238, 244), bellyMul = V(1.3, 1.45, 1.3),
+		arm = C(230, 110, 180), armMul = 1.1, leg = C(200, 90, 160), legMul = 1.0, glove = C(90, 220, 130), gloveMul = 1.4,
+		shoe = C(230, 110, 180), shoeMul = 1.25, accent = SUPPORT,
+		head = function(add, u)
+			local H = 1.45 * u
+			local y = (H - u) * 0.4
+			add("BackHair", V(1.02 * H, 1.02 * H, 1.02 * H), CF(0, y + 0.02 * H, 0.1 * H), C(240, 90, 170), M.SmoothPlastic, BALL)
+			add("BigHead", V(H, H, H), CF(0, y, -0.02 * H), SKIN, M.SmoothPlastic, BALL)
+			for _, s in ipairs({ -1, 1 }) do
+				add("Bun", V(0.5 * H, 0.5 * H, 0.5 * H), CF(s * 0.46 * H, y + 0.36 * H, 0.05 * H), C(240, 90, 170), M.SmoothPlastic, BALL)
+			end
+			add("Cap", V(0.62 * H, 0.3 * H, 0.42 * H), CF(0, y + 0.52 * H, -0.08 * H), C(250, 250, 250))
+			add("CapCrossH", V(0.26 * H, 0.08 * H, 0.04 * H), CF(0, y + 0.52 * H, -0.3 * H), SUPPORT, M.Neon)
+			add("CapCrossV", V(0.08 * H, 0.26 * H, 0.04 * H), CF(0, y + 0.52 * H, -0.3 * H), SUPPORT, M.Neon)
+			eyes(add, H, y + 0.04 * H, nil, C(40, 120, 70))
+			add("Mouth", V(0.18 * H, 0.05 * H, 0.05 * H), CF(0, y - 0.22 * H, -0.47 * H), C(180, 60, 90))
+		end,
+		extra = function(add, s, accent)
+			add("Medpack", V(s.X * 1.05, s.Y * 1.35, 1.1), CF(0, s.Y * 0.15, s.Z * 0.6 + 0.6), C(250, 250, 250))
+			add("CrossH", V(s.X * 0.6, 0.35, 0.1), CF(0, s.Y * 0.2, s.Z * 0.6 + 1.17), accent, M.Neon)
+			add("CrossV", V(0.35, s.X * 0.6, 0.1), CF(0, s.Y * 0.2, s.Z * 0.6 + 1.17), accent, M.Neon)
+			for _, x in ipairs({ -0.3, 0.3 }) do
+				add("Strap", V(0.2, s.Y * 1.05, 0.1), CF(x * s.X, s.Y * 0.05, -s.Z * 0.64), C(200, 200, 210))
+			end
+		end,
+	}
+	COSTUME.greg = { -- диджей: широкий силуэт, бумбокс на плече, огромные наушники
+		chest = C(60, 160, 80), chestMul = V(1.6, 1.15, 1.7), belly = C(60, 160, 80), bellyMul = V(1.55, 1.1, 1.65),
+		arm = C(60, 160, 80), armMul = 1.25, leg = C(30, 60, 40), legMul = 1.2, glove = C(250, 210, 60), gloveMul = 1.5,
+		shoe = C(240, 240, 240), shoeMul = 1.55, accent = SUPPORT,
+		head = function(add, u)
+			local H = 1.4 * u
+			local y = (H - u) * 0.35
+			add("BigHead", V(H, H, H), CF(0, y, 0), C(200, 150, 110), M.SmoothPlastic, BALL)
+			add("Cap", V(0.3 * H, 1.04 * H, 1.04 * H), CF(0, y + 0.32 * H, 0) * VERT, C(250, 210, 60), M.SmoothPlastic, CYL)
+			add("CapBrim", V(0.7 * H, 0.07 * H, 0.45 * H), CF(0, y + 0.22 * H, 0.62 * H), C(60, 160, 80))
+			add("Band", V(1.12 * H, 0.1 * H, 0.16 * H), CF(0, y + 0.5 * H, 0), C(20, 20, 24))
+			for _, s in ipairs({ -1, 1 }) do
+				add("Phone", V(0.26 * H, 0.6 * H, 0.6 * H), CF(s * 0.55 * H, y, 0), C(20, 20, 24), M.SmoothPlastic, CYL)
+				add("PhoneRing", V(0.06 * H, 0.66 * H, 0.66 * H), CF(s * 0.66 * H, y, 0), SUPPORT, M.Neon, CYL)
+			end
+			add("Shades", V(0.8 * H, 0.16 * H, 0.08 * H), CF(0, y + 0.06 * H, -0.47 * H), C(10, 10, 12), M.Glass)
+			add("Mustache", V(0.42 * H, 0.08 * H, 0.08 * H), CF(0, y - 0.14 * H, -0.48 * H), C(50, 30, 20))
+		end,
+		extra = function(add, s, accent)
+			local base = CF(s.X * 0.62, s.Y * 0.78, 0)
+			add("Boombox", V(2, 1.1, 0.7), base, C(90, 90, 98), M.Metal)
+			for _, x in ipairs({ -0.55, 0.55 }) do
+				add("Speaker", V(0.15, 0.8, 0.8), base * CF(x, 0, -0.38) * ALONG_Z, C(14, 14, 16), M.SmoothPlastic, CYL)
+				add("SpeakerRing", V(0.1, 0.9, 0.9), base * CF(x, 0, -0.36) * ALONG_Z, accent, M.Neon, CYL)
+			end
+			add("Handle", V(1.4, 0.15, 0.15), base * CF(0, 0.75, 0), C(40, 40, 44), M.Metal)
+			add("Chain", V(s.X * 0.7, 0.15, 0.12), CF(0, s.Y * 0.1, -s.Z * 0.88), Color3.fromRGB(255, 200, 60), M.Metal)
+		end,
+	}
+	COSTUME.oscar = { -- громила: огромные плечи и перчатки, маленькая голова в каске, гаечный ключ за спиной
+		chest = C(120, 80, 50), chestMul = V(1.85, 1.25, 1.5), belly = C(60, 70, 110), bellyMul = V(1.4, 1.15, 1.35),
+		arm = C(120, 80, 50), armMul = 1.5, leg = C(60, 70, 110), legMul = 1.3, glove = C(150, 110, 60), gloveMul = 2.0,
+		shoe = C(50, 40, 30), shoeMul = 1.45, accent = LONE,
+		head = function(add, u)
+			local H = 1.1 * u
+			local y = (H - u) * 0.3
+			add("BigHead", V(H, H, H), CF(0, y, 0), SKIN, M.SmoothPlastic, BALL)
+			add("Helmet", V(0.4 * H, 1.12 * H, 1.12 * H), CF(0, y + 0.32 * H, 0) * VERT, C(230, 190, 40), M.SmoothPlastic, CYL)
+			add("HelmetBrim", V(0.08 * H, 1.4 * H, 1.4 * H), CF(0, y + 0.15 * H, 0) * VERT, C(200, 160, 30), M.SmoothPlastic, CYL)
+			add("Headlamp", V(0.2 * H, 0.3 * H, 0.3 * H), CF(0, y + 0.32 * H, -0.6 * H) * ALONG_Z, C(255, 250, 210), M.Neon, CYL)
+			add("Beard", V(0.85 * H, 0.6 * H, 0.42 * H), CF(0, y - 0.32 * H, -0.3 * H), C(90, 56, 30))
+			for _, s in ipairs({ -1, 1 }) do
+				add("Pupil", V(0.12 * H, 0.12 * H, 0.12 * H), CF(s * 0.18 * H, y + 0.06 * H, -0.48 * H), BLACK, M.SmoothPlastic, BALL)
+			end
+		end,
+		extra = function(add, s, accent)
+			for _, x in ipairs({ -1, 1 }) do
+				add("ShoulderPad", V(s.X * 0.55, s.Y * 0.35, s.Z * 1.6), CF(x * s.X * 0.95, s.Y * 0.55, 0), C(230, 110, 30))
+				add("PadTrim", V(s.X * 0.57, 0.12, s.Z * 1.62), CF(x * s.X * 0.95, s.Y * 0.4, 0), accent, M.Neon)
+			end
+			add("WrenchHandle", V(0.35, 3.4, 0.25), CF(0, s.Y * 0.1, s.Z * 0.9) * CFrame.Angles(0, 0, math.rad(35)), C(150, 150, 160), M.Metal)
+			add("WrenchJaw", V(1.1, 0.6, 0.3), CF(-0.9, s.Y * 0.1 + 1.35, s.Z * 0.9) * CFrame.Angles(0, 0, math.rad(35)), C(150, 150, 160), M.Metal)
+		end,
+	}
+	COSTUME.felix = { -- сталкер: противогаз со светящимися стёклами, длинный плащ, огромный рюкзак
+		chest = C(110, 120, 70), chestMul = V(1.1, 1.2, 1.2), belly = C(110, 120, 70), bellyMul = V(1.25, 1.9, 1.25),
+		arm = C(110, 120, 70), armMul = 1.0, leg = C(40, 40, 40), legMul = 0.9, glove = C(25, 25, 25), gloveMul = 1.3,
+		shoe = C(60, 50, 40), shoeMul = 1.25, accent = LONE,
+		head = function(add, u)
+			local H = 1.45 * u
+			local y = (H - u) * 0.4
+			add("Hood", V(1.12 * H, 1.12 * H, 1.12 * H), CF(0, y + 0.04 * H, 0.12 * H), C(90, 98, 56), M.Fabric, BALL)
+			add("Mask", V(H, H, H), CF(0, y, 0), C(58, 60, 56), M.SmoothPlastic, BALL)
+			for _, s in ipairs({ -1, 1 }) do
+				add("LensRim", V(0.08 * H, 0.42 * H, 0.42 * H), CF(s * 0.2 * H, y + 0.08 * H, -0.46 * H) * ALONG_Z, C(20, 20, 20), M.Metal, CYL)
+				add("Lens", V(0.06 * H, 0.32 * H, 0.32 * H), CF(s * 0.2 * H, y + 0.08 * H, -0.5 * H) * ALONG_Z, Color3.fromRGB(255, 140, 40), M.Neon, CYL)
+			end
+			add("Filter", V(0.36 * H, 0.3 * H, 0.3 * H), CF(0, y - 0.22 * H, -0.55 * H) * ALONG_Z, C(40, 42, 40), M.Metal, CYL)
+		end,
+		extra = function(add, s, accent)
+			add("Backpack", V(s.X * 0.9, s.Y * 1.25, 1), CF(0, s.Y * 0.1, s.Z * 0.6 + 0.55), C(70, 76, 44), M.Fabric)
+			add("Bedroll", V(s.X * 1.1, 0.8, 0.8), CF(0, s.Y * 0.85, s.Z * 0.6 + 0.55), C(140, 60, 40), M.Fabric, CYL)
+			add("Antenna", V(0.1, 3, 0.1), CF(s.X * 0.35, s.Y * 1.4, s.Z * 0.6 + 0.6), C(40, 40, 40), M.Metal)
+			add("AntennaTip", V(0.3, 0.3, 0.3), CF(s.X * 0.35, s.Y * 1.4 + 1.5, s.Z * 0.6 + 0.6), accent, M.Neon, BALL)
+		end,
+	}
+	local KILL = Color3.fromRGB(150, 10, 10)
+	COSTUME.executioner = { -- мясник: мешок с крестиками-глазами, фартук, цепи, огромные руки
+		chest = C(60, 32, 30), chestMul = V(1.75, 1.3, 1.55), belly = C(150, 140, 120), bellyMul = V(1.5, 1.4, 1.45),
+		arm = C(60, 32, 30), armMul = 1.5, leg = C(40, 30, 30), legMul = 1.35, glove = C(20, 18, 18), gloveMul = 2.0,
+		shoe = C(30, 25, 25), shoeMul = 1.5, accent = KILL,
+		head = function(add, u)
+			local H = 1.7 * u
+			local y = (H - u) * 0.35
+			add("Sack", V(H, H * 1.05, H), CF(0, y, 0), C(150, 115, 70), M.Fabric)
+			add("SackTop", V(0.3 * H, 0.3 * H, 0.3 * H), CF(0, y + 0.6 * H, 0) * CFrame.Angles(0, 0, math.rad(20)), C(150, 115, 70), M.Fabric)
+			add("Rope", V(0.12 * H, 0.82 * H, 0.82 * H), CF(0, y - 0.46 * H, 0) * VERT, C(100, 80, 50), M.Fabric, CYL)
+			for _, s in ipairs({ -1, 1 }) do
+				for _, a in ipairs({ 45, -45 }) do
+					add("XEye", V(0.32 * H, 0.07 * H, 0.05 * H), CF(s * 0.22 * H, y + 0.12 * H, -0.51 * H) * CFrame.Angles(0, 0, math.rad(a)), Color3.fromRGB(255, 40, 30), M.Neon)
+				end
+			end
+			add("Stitch", V(0.55 * H, 0.05 * H, 0.05 * H), CF(0, y - 0.2 * H, -0.51 * H), C(40, 20, 10))
+			for _, x in ipairs({ -0.2, -0.07, 0.07, 0.2 }) do
+				add("StitchV", V(0.03 * H, 0.14 * H, 0.05 * H), CF(x * H, y - 0.2 * H, -0.52 * H), C(40, 20, 10))
+			end
+		end,
+		extra = function(add, s)
+			for _, a in ipairs({ 35, -35 }) do
+				add("Chain", V(0.25, s.Y * 1.5, 0.25), CF(0, 0, -s.Z * 0.8) * CFrame.Angles(0, 0, math.rad(a)), C(90, 90, 96), M.Metal)
+			end
+			add("Blood", V(s.X * 0.5, s.Y * 0.4, 0.05), CF(s.X * 0.2, -s.Y * 0.9, -s.Z * 0.76), C(110, 10, 10))
+			add("Hook", V(0.2, 1.2, 0.2), CF(s.X * 0.7, -s.Y * 0.6, 0), C(140, 140, 150), M.Metal)
+		end,
+	}
+	COSTUME.glitch = { -- человек-телевизор: тонкий длинный силуэт, ЭЛТ вместо головы, свисающие кабели
+		chest = C(20, 20, 26), chestMul = V(0.95, 1.2, 0.95), belly = C(20, 20, 26), bellyMul = V(0.9, 1.1, 0.9),
+		arm = C(20, 20, 26), armMul = 0.95, leg = C(20, 20, 26), legMul = 0.95, glove = C(230, 230, 240), gloveMul = 1.3,
+		shoe = C(15, 15, 18), shoeMul = 1.1, accent = Color3.fromRGB(255, 60, 200),
+		head = function(add, u)
+			local H = 1.9 * u
+			local y = (H - u) * 0.35
+			add("TV", V(H, H * 0.8, H * 0.85), CF(0, y, 0.05 * H), C(44, 44, 50))
+			local screen = add("TVScreen", V(0.78 * H, 0.58 * H, 0.05 * H), CF(-0.04 * H, y, -0.39 * H), C(120, 235, 255), M.Neon)
+			tag(screen, "P2D_Flicker", { Strong = true })
+			add("Knob", V(0.08 * H, 0.12 * H, 0.12 * H), CF(0.42 * H, y - 0.1 * H, -0.39 * H) * ALONG_Z, C(100, 100, 110), M.Metal, CYL)
+			for _, s in ipairs({ -1, 1 }) do
+				add("Antenna", V(0.04 * H, 0.6 * H, 0.04 * H), CF(s * 0.18 * H, y + 0.62 * H, 0.05 * H) * CFrame.Angles(0, 0, math.rad(-25 * s)), C(180, 180, 190), M.Metal)
+			end
+		end,
+		extra = function(add, s, accent)
+			add("StripeA", V(s.X * 1.0, 0.18, s.Z * 1.0), CF(0, s.Y * 0.2, 0), Color3.fromRGB(70, 230, 255), M.Neon)
+			add("StripeB", V(s.X * 1.0, 0.12, s.Z * 1.0), CF(0, -s.Y * 0.1, 0), accent, M.Neon)
+			for _, x in ipairs({ -0.3, 0.1, 0.35 }) do
+				add("Cable", V(0.12, 3.2, 0.12), CF(x * s.X, -s.Y * 0.6, s.Z * 0.6) * CFrame.Angles(math.rad(-15), 0, math.rad(x * 30)), C(10, 10, 12))
+			end
+		end,
+	}
+	COSTUME.binky = { -- маскот: гигантская круглая голова с ушами и улыбкой, белые перчатки, большие ботинки
+		chest = C(150, 80, 220), chestMul = V(1.35, 1.2, 1.35), belly = C(185, 130, 240), bellyMul = V(1.5, 1.2, 1.5),
+		arm = C(150, 80, 220), armMul = 1.15, leg = C(150, 80, 220), legMul = 1.15, glove = C(245, 245, 245), gloveMul = 2.2,
+		shoe = C(220, 40, 40), shoeMul = 1.75, accent = KILL,
+		head = function(add, u)
+			local H = 2.3 * u
+			local y = (H - u) * 0.38
+			add("BigHead", V(H, H, H), CF(0, y, 0), C(150, 80, 220), M.SmoothPlastic, BALL)
+			for _, s in ipairs({ -1, 1 }) do
+				local ear = CF(s * 0.25 * H, y + 0.72 * H, 0) * CFrame.Angles(0, 0, math.rad(-14 * s))
+				add("Ear", V(0.28 * H, 0.85 * H, 0.12 * H), ear, C(150, 80, 220))
+				add("EarIn", V(0.16 * H, 0.65 * H, 0.05 * H), ear * CF(0, 0, -0.07 * H), C(255, 150, 200))
+				add("EyeHole", V(0.05 * H, 0.32 * H, 0.32 * H), CF(s * 0.2 * H, y + 0.1 * H, -0.46 * H) * ALONG_Z, C(5, 5, 5), M.SmoothPlastic, CYL)
+				add("RedPupil", V(0.09 * H, 0.09 * H, 0.09 * H), CF(s * 0.2 * H, y + 0.1 * H, -0.49 * H), Color3.fromRGB(255, 30, 30), M.Neon, BALL)
+			end
+			add("Nose", V(0.14 * H, 0.14 * H, 0.14 * H), CF(0, y - 0.04 * H, -0.5 * H), C(220, 40, 40), M.SmoothPlastic, BALL)
+			add("Grin", V(0.62 * H, 0.12 * H, 0.05 * H), CF(0, y - 0.22 * H, -0.46 * H), C(255, 250, 240), M.Neon)
+			for _, x in ipairs({ -0.2, -0.07, 0.07, 0.2 }) do
+				add("Tooth", V(0.02 * H, 0.12 * H, 0.06 * H), CF(x * H, y - 0.22 * H, -0.47 * H), C(30, 0, 0))
+			end
+		end,
+		extra = function(add, s)
+			for _, x in ipairs({ -1, 1 }) do
+				add("Bow", V(0.6, 0.5, 0.2), CF(x * 0.35, s.Y * 0.42, -s.Z * 0.7) * CFrame.Angles(0, 0, math.rad(x * 20)), C(220, 40, 40))
+			end
+			for i = 0, 1 do
+				add("Button", V(0.3, 0.3, 0.3), CF(0, -i * s.Y * 0.35, -s.Z * 0.7), C(255, 210, 60), M.SmoothPlastic, BALL)
+			end
+		end,
+	}
+end
+
+local function segOf(name)
+	if name == "Head" then return "head" end
+	if name == "UpperTorso" or name == "Torso" then return "chest" end
+	if name == "LowerTorso" then return "belly" end
+	if string.find(name, "Hand") then return "hand" end
+	if string.find(name, "Foot") then return "foot" end
+	if string.find(name, "UpperArm") or string.find(name, "LowerArm") then return "arm" end
+	if string.find(name, "UpperLeg") or string.find(name, "LowerLeg") then return "leg" end
+	if name == "Left Arm" or name == "Right Arm" then return "arm6" end
+	if name == "Left Leg" or name == "Right Leg" then return "leg6" end
+	return nil
+end
+
+-- внешний вид персонажа: костюм вместо тела, обводка цвета роли
 local function applyLook(char, c)
-	pcall(function()
-		local col = charColor(c)
-		local body
-		if c.id == "binky" then
-			body = col:Lerp(BLACK, 0.3)
-		elseif c.killer then
-			body = Color3.fromRGB(28, 26, 30)
-		else
-			body = col:Lerp(BLACK, 0.35)
-		end
+	local ok, err = pcall(function()
+		local spec = COSTUME[c.id]
 		local old = char:FindFirstChild("P2D_Gear")
 		if old then old:Destroy() end
+		local oldHl = char:FindFirstChild("P2D_Outline")
+		if oldHl then oldHl:Destroy() end
 		for _, o in ipairs(char:GetChildren()) do
 			if o:IsA("Shirt") or o:IsA("Pants") or o:IsA("ShirtGraphic") or o:IsA("Accoutrement") then
 				o:Destroy()
-			elseif o:IsA("BasePart") and o.Name ~= "HumanoidRootPart" then
-				if o.Name ~= "Head" or c.killer then
-					o.Color = body
+			end
+		end
+		if not spec then return end
+		local hum = char:FindFirstChildOfClass("Humanoid")
+		local r6 = hum and hum.RigType == Enum.HumanoidRigType.R6
+		local folder = Instance.new("Model")
+		folder.Name = "P2D_Gear"
+		local accent = spec.accent or roleColor(c)
+		local chestPart = nil
+		for _, p in ipairs(char:GetChildren()) do
+			local seg = p:IsA("BasePart") and p.Name ~= "HumanoidRootPart" and segOf(p.Name) or nil
+			if seg then
+				local function add(name, size, off, color, mat, shape)
+					return gearPart(folder, p, name, size, off, color, mat, shape)
+				end
+				local s = p.Size
+				if seg == "head" then
+					spec.head(add, r6 and 1.2 or math.clamp(s.Y, 0.8, 1.8))
+				elseif seg == "chest" then
+					chestPart = p
+					local m = spec.chestMul
+					if r6 then
+						add("Chest", V(s.X * m.X, s.Y * 0.62 * m.Y, s.Z * m.Z), CF(0, s.Y * 0.2, 0), spec.chest)
+						add("Belly", V(s.X * spec.bellyMul.X, s.Y * 0.42 * spec.bellyMul.Y, s.Z * spec.bellyMul.Z), CF(0, -s.Y * 0.3, 0), spec.belly)
+					else
+						add("Chest", V(s.X * m.X, s.Y * m.Y, s.Z * m.Z), CFrame.identity, spec.chest)
+					end
+					add("Accent", V(s.X * m.X + 0.06, 0.18, s.Z * m.Z + 0.06), CF(0, r6 and -s.Y * 0.08 or -s.Y * 0.42, 0), accent, M.Neon)
+				elseif seg == "belly" then
+					local m = spec.bellyMul
+					add("Belly", V(s.X * m.X, s.Y * m.Y * 1.6, s.Z * m.Z), CF(0, -s.Y * 0.2 * (m.Y - 1), 0), spec.belly)
+				elseif seg == "arm" then
+					add("Sleeve", s * spec.armMul, CFrame.identity, spec.arm)
+				elseif seg == "leg" then
+					add("Pants", s * spec.legMul, CFrame.identity, spec.leg)
+				elseif seg == "hand" then
+					local d = 0.75 * spec.gloveMul
+					add("Glove", V(d, d, d), CF(0, -s.Y * 0.2, 0), spec.glove, M.SmoothPlastic, BALL)
+				elseif seg == "foot" then
+					add("Shoe", V(0.95, 0.6, 1.5) * spec.shoeMul, CF(0, 0.05, -0.3 * spec.shoeMul), spec.shoe)
+				elseif seg == "arm6" then
+					add("Sleeve", V(s.X * spec.armMul, s.Y * 0.75, s.Z * spec.armMul), CF(0, s.Y * 0.12, 0), spec.arm)
+					local d = 0.75 * spec.gloveMul
+					add("Glove", V(d, d, d), CF(0, -s.Y * 0.42, 0), spec.glove, M.SmoothPlastic, BALL)
+				elseif seg == "leg6" then
+					add("Pants", V(s.X * spec.legMul, s.Y * 0.72, s.Z * spec.legMul), CF(0, s.Y * 0.12, 0), spec.leg)
+					add("Shoe", V(0.95, 0.6, 1.5) * spec.shoeMul, CF(0, -s.Y * 0.42, -0.3 * spec.shoeMul), spec.shoe)
+				end
+				p.Transparency = 1
+				for _, d in ipairs(p:GetChildren()) do
+					if d:IsA("Decal") then d:Destroy() end
 				end
 			end
 		end
-		local head = char:FindFirstChild("Head")
-		if not head then return end
-		if c.killer then
-			local face = head:FindFirstChildOfClass("Decal")
-			if face then face:Destroy() end
-		end
-		local hum = char:FindFirstChildOfClass("Humanoid")
-		local u = (hum and hum.RigType == Enum.HumanoidRigType.R6) and 1.2 or math.clamp(head.Size.Y, 0.8, 1.8)
-		local folder = Instance.new("Model")
-		folder.Name = "P2D_Gear"
-		local fn = GEAR[c.id]
-		if fn then
-			fn(function(name, size, offset, color, mat, shape)
-				return gearPart(folder, head, name, size, offset, color, mat, shape)
-			end, u)
+		if chestPart and spec.extra then
+			spec.extra(function(name, size, off, color, mat, shape)
+				return gearPart(folder, chestPart, name, size, off, color, mat, shape)
+			end, chestPart.Size, accent)
 		end
 		folder.Parent = char
+		-- мультяшная обводка: силуэт читается на тёмном фоне (сквозь стены не видна)
+		local hl = Instance.new("Highlight")
+		hl.Name = "P2D_Outline"
+		hl.DepthMode = Enum.HighlightDepthMode.Occluded
+		hl.FillTransparency = 1
+		hl.OutlineColor = c.killer and Color3.fromRGB(150, 20, 20) or roleColor(c)
+		hl.OutlineTransparency = c.killer and 0.45 or 0.25
+		hl.Parent = char
 		char:SetAttribute("CharId", c.id)
 	end)
+	if not ok then warn("[P2D] костюм: " .. tostring(err)) end
 end
 
 ------------------------------------------------------------------------
 -- КАРТЫ: общие функции
 ------------------------------------------------------------------------
 local MAP_INFO = {
-	{ key = "Hills", name = "ХОЛМЫ РАДОСТИ", sub = "ЗОНА 1 · АКТ 1", color = { 90, 190, 90 } },
-	{ key = "Arcade", name = "АРКАДА «ПОЛНОЧЬ»", sub = "ЗАЛ ИГРОВЫХ АВТОМАТОВ", color = { 220, 70, 210 } },
-	{ key = "Maze", name = "ЛАБИРИНТ 8-БИТ", sub = "УРОВЕНЬ 255", color = { 70, 120, 255 } },
-	{ key = "Room", name = "ДЕТСКАЯ 1996", sub = "РЕАЛЬНЫЙ МИР?", color = { 235, 165, 60 } },
+	{ key = "Forest", name = "ТУМАННЫЙ ЛЕС", sub = "ЛЕСОПИЛКА «КРАСНЫЙ БОР»" },
+	{ key = "Complex", name = "КОМПЛЕКС", sub = "ЗАВОД №13 · НОЧНАЯ СМЕНА" },
+	{ key = "Farm", name = "ФЕРМА", sub = "«ТИХИЙ ЛУГ» · ЗАКАТ" },
 }
 local MAP_BY_KEY = {}
 for _, info in ipairs(MAP_INFO) do MAP_BY_KEY[info.key] = info end
@@ -539,12 +1033,12 @@ local mapsFolder = Instance.new("Folder")
 mapsFolder.Name = "Maps"
 mapsFolder.Parent = Workspace
 
--- динамика карт (жетоны, выходы) — отдельные «постоянные» модели, чтобы клиент видел их при стриминге
+-- выходы — отдельные «постоянные» модели, чтобы клиент видел их при стриминге
 local dynamicFolder = Instance.new("Folder")
 dynamicFolder.Name = "P2D_Dynamic"
 dynamicFolder.Parent = Workspace
 
-local function newMap(info, origin, size, groundColor, groundMat)
+local function newMap(info, origin, half)
 	local model = Instance.new("Model")
 	model.Name = "Map_" .. info.key
 	model.Parent = mapsFolder
@@ -554,18 +1048,17 @@ local function newMap(info, origin, size, groundColor, groundMat)
 	dyn.Parent = dynamicFolder
 	local def = {
 		key = info.key, display = info.name, info = info, origin = origin, model = model, dynamic = dyn,
-		size = size, survivorSpawns = {}, killerSpawns = {}, escapes = {}, blockers = {}, tokenSpots = {},
-		beamH = 120,
+		half = half, survivorSpawns = {}, killerSpawns = {}, escapes = {}, blockers = {}, beamH = 90,
 	}
-	mk(model, "Ground", Vector3.new(size + 8, 4, size + 8), origin + Vector3.new(0, -2, 0), groundColor, groundMat)
-	local h = size / 2
+	-- невидимые стены по краю игровой зоны
 	local function border(sz, off)
-		mk(model, "Border", sz, origin + off, BLACK, M.SmoothPlastic, { Transparency = 1 })
+		mk(model, "Border", sz, origin + off, BLACK, M.SmoothPlastic, { Transparency = 1, CanQuery = false })
 	end
-	border(Vector3.new(size + 8, 160, 4), Vector3.new(0, 80, -(h + 2)))
-	border(Vector3.new(size + 8, 160, 4), Vector3.new(0, 80, h + 2))
-	border(Vector3.new(4, 160, size + 8), Vector3.new(h + 2, 80, 0))
-	border(Vector3.new(4, 160, size + 8), Vector3.new(-(h + 2), 80, 0))
+	local b = half + 2
+	border(Vector3.new(b * 2 + 4, 200, 4), Vector3.new(0, 100, -b))
+	border(Vector3.new(b * 2 + 4, 200, 4), Vector3.new(0, 100, b))
+	border(Vector3.new(4, 200, b * 2 + 4), Vector3.new(b, 100, 0))
+	border(Vector3.new(4, 200, b * 2 + 4), Vector3.new(-b, 100, 0))
 	return def
 end
 
@@ -594,49 +1087,39 @@ local function scatter(def, r, count, half, margin, place, filter)
 end
 
 -- точка спавна (невидимый маркер). Несколько игроков могут выбрать одну точку.
-local function addSpawn(def, kind, x, z)
-	local p = mk(def.model, kind .. "Spawn", Vector3.new(4, 1, 4), def.origin + Vector3.new(x, 0.5, z),
+local function addSpawn(def, kind, x, z, y)
+	local p = mk(def.model, kind .. "Spawn", Vector3.new(4, 1, 4), def.origin + Vector3.new(x, (y or 0) + 0.5, z),
 		BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
 	table.insert(kind == "Killer" and def.killerSpawns or def.survivorSpawns, p)
-	reserve(def, x, z, 12)
+	reserve(def, x, z, 10)
 end
 
-local function addTokenSpot(def, x, z, y)
-	table.insert(def.tokenSpots, def.origin + Vector3.new(x, y or 0, z))
-end
-
--- точки жетонов на свободной земле
-local function scatterTokenSpots(def, r, count, half, filter)
-	local spots = {}
-	scatter(def, r, count, half, 3, function(x, z)
-		table.insert(spots, { x, z })
-	end, filter)
-	for _, s in ipairs(spots) do
-		addTokenSpot(def, s[1], s[2])
-		reserve(def, s[1], s[2], 3)
-	end
-end
-
--- точка побега: зона + столб света + подпись; декор задаёт style(model, pos). Неактивна, пока не откроется.
-local function addEscape(def, x, z, label, style)
+------------------------------------------------------------------------
+-- ВЫХОДЫ: ворота / двери в стенах. Конструктор возвращает створки:
+-- { part, hinge = CFrame?, angle = число?, open = CFrame? } — либо поворот на петле, либо сдвиг.
+------------------------------------------------------------------------
+local function addEscape(def, x, z, label, normal, build)
 	local pos = def.origin + Vector3.new(x, 0, z)
 	local m = Instance.new("Model")
 	m.Name = "Escape"
 	m.Parent = def.dynamic
-	if style then style(m, pos) end
-	local pad = mk(m, "Pad", Vector3.new(0.5, 12, 12), CFrame.new(pos + Vector3.new(0, 0.25, 0)) * VERT,
-		Color3.fromRGB(70, 18, 22), M.Metal, { Shape = CYL, CanCollide = false })
+	local gateCF = CFrame.lookAt(pos - normal * 6, pos - normal * 6 + normal) -- ворота стоят в 6 м за зоной, «лицом» в карту
+	local doors = build(m, gateCF)
+	for _, d in ipairs(doors) do d.closed = d.part.CFrame end
+	-- лампа над воротами: красная — закрыто, зелёная — открыто
+	local lamp = mk(m, "GateLamp", Vector3.new(1.4, 0.8, 0.8), gateCF * CFrame.new(0, (doors.lampY or 11), -0.8), LAMP_RED, M.Neon, NOCOL)
+	local light = pointLight(lamp, LAMP_RED, 18, 1.2)
 	local zone = mk(m, "EscapeZone", Vector3.new(14, 12, 14), pos + Vector3.new(0, 6, 0),
 		Color3.new(1, 0, 0), M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
 	zone:SetAttribute("Active", false)
-	local bh = def.beamH
-	local beam = mk(m, "Beam", Vector3.new(bh, 4, 4), CFrame.new(pos + Vector3.new(0, bh / 2, 0)) * VERT,
-		GREEN, M.Neon, { Shape = CYL, Transparency = 1, CanCollide = false, CanQuery = false, CastShadow = false })
-	local light = pointLight(pad, GREEN, 35, 3)
-	light.Enabled = false
+	local beamPart = nil
+	if def.beamH > 0 then
+		beamPart = mk(m, "Beam", Vector3.new(def.beamH, 3, 3), CFrame.new(pos - normal * 10 + Vector3.new(0, def.beamH / 2, 0)) * VERT,
+			GREEN, M.Neon, { Shape = CYL, Transparency = 1, CanCollide = false, CanQuery = false, CastShadow = false })
+	end
 	local bb = Instance.new("BillboardGui")
 	bb.Size = UDim2.fromOffset(260, 40)
-	bb.StudsOffset = Vector3.new(0, 12, 0)
+	bb.StudsOffset = Vector3.new(0, 13, 0)
 	bb.AlwaysOnTop = true
 	bb.MaxDistance = 1200
 	bb.Adornee = zone
@@ -651,17 +1134,47 @@ local function addEscape(def, x, z, label, style)
 	txt.TextColor3 = GREEN
 	txt.Text = "ВЫХОД: " .. label
 	txt.Parent = bb
-	table.insert(def.escapes, { zone = zone, pad = pad, beam = beam, light = light, gui = bb, label = label })
-	reserve(def, x, z, 16)
+	table.insert(def.escapes, { zone = zone, doors = doors, lamp = lamp, light = light, beam = beamPart, gui = bb, label = label, token = 0 })
+	reserve(def, x, z, 14)
+end
+
+local function animateDoors(e, open)
+	e.token += 1
+	local my = e.token
+	if not open then
+		for _, d in ipairs(e.doors) do d.part.CFrame = d.closed end
+		return
+	end
+	task.spawn(function()
+		local t0 = os.clock()
+		local dur = 1.6
+		while true do
+			if e.token ~= my then return end
+			local a = math.clamp((os.clock() - t0) / dur, 0, 1)
+			local k = 1 - (1 - a) ^ 3
+			for _, d in ipairs(e.doors) do
+				if d.hinge then
+					local rel = d.hinge:Inverse() * d.closed
+					d.part.CFrame = d.hinge * CFrame.Angles(0, d.angle * k, 0) * rel
+				elseif d.open then
+					d.part.CFrame = d.closed:Lerp(d.open, k)
+				end
+			end
+			if a >= 1 then return end
+			RunService.Heartbeat:Wait()
+		end
+	end)
 end
 
 local function setEscapeVisual(e, on)
 	e.zone:SetAttribute("Active", on)
-	e.pad.Color = on and Color3.fromRGB(60, 230, 110) or Color3.fromRGB(70, 18, 22)
-	e.pad.Material = on and M.Neon or M.Metal
-	e.beam.Transparency = on and 0.55 or 1
-	e.light.Enabled = on
+	e.lamp.Color = on and GREEN or LAMP_RED
+	e.light.Color = on and GREEN or LAMP_RED
+	e.light.Range = on and 30 or 18
+	e.light.Brightness = on and 3 or 1.2
+	if e.beam then e.beam.Transparency = on and 0.6 or 1 end
 	e.gui.Enabled = on
+	animateDoors(e, on)
 end
 
 local function resetEscapes(def)
@@ -676,1111 +1189,1000 @@ local function openRandomEscape(def)
 	return e
 end
 
--- деталь по двум углам (удобно для мебели)
-local function boxAt(def, name, x1, x2, y1, y2, z1, z2, color, mat, opts)
-	return mk(def.model, name, Vector3.new(x2 - x1, y2 - y1, z2 - z1),
-		def.origin + Vector3.new((x1 + x2) / 2, (y1 + y2) / 2, (z1 + z2) / 2), color, mat, opts)
+-- створка-«дверь» (одна опорная деталь, декор приварен к ней)
+local function leaf(m, size, cf, color, mat)
+	return mk(m, "GateLeaf", size, cf, color, mat)
 end
 
--- клин-пандус: dir — направление ПОДЪЁМА (к платформе)
-local function ramp(def, x, z, w, h, len, dir, color, mat)
-	local center = def.origin + Vector3.new(x, h / 2, z)
-	return mkc("WedgePart", def.model, "Ramp", Vector3.new(w, h, len), CFrame.lookAt(center, center - dir), color, mat)
-end
-
--- дверь в стене с неоновой табличкой (normal — внутрь карты)
-local function exitDoorStyle(normal, sign, doorColor)
-	return function(m, pos)
-		local center = pos - normal * 6.8 + Vector3.new(0, 5, 0)
-		local cf = CFrame.lookAt(center, center + normal)
-		mk(m, "Door", Vector3.new(8, 10, 0.4), cf, doorColor or Color3.fromRGB(30, 60, 40), M.Metal)
-		for _, sx in ipairs({ -4.2, 4.2 }) do
-			mk(m, "DoorFrame", Vector3.new(0.4, 10.6, 0.5), cf * CFrame.new(sx, 0.3, 0), GREEN, M.Neon, NOCOL)
+-- двустворчатые ворота на петлях (сетка-рабица или доски); створки открываются наружу
+local function swingGate(width, height, style)
+	return function(m, g)
+		local doors = {}
+		local postC = style == "wood" and Color3.fromRGB(70, 50, 34) or Color3.fromRGB(70, 74, 78)
+		local postM = style == "wood" and M.Wood or M.Metal
+		for _, s in ipairs({ -1, 1 }) do
+			mk(m, "GatePost", Vector3.new(1, height + 2, 1), g * CFrame.new(s * (width / 2 + 0.5), (height + 2) / 2, 0), postC, postM)
+			local lw = width / 2
+			local cf = g * CFrame.new(s * lw / 2, height / 2 + 0.3, 0)
+			local p
+			if style == "wood" then
+				p = leaf(m, Vector3.new(lw - 0.1, height, 0.4), cf, Color3.fromRGB(96, 66, 42), M.WoodPlanks)
+				for _, y in ipairs({ -0.3, 0.3 }) do
+					weldTo(mk(m, "GateBar", Vector3.new(lw - 0.3, 0.6, 0.3), cf * CFrame.new(0, y * height, -0.3), Color3.fromRGB(70, 48, 30), M.Wood), p)
+				end
+				weldTo(mk(m, "GateBrace", Vector3.new(0.5, height * 1.05, 0.3), cf * CFrame.new(0, 0, -0.3) * CFrame.Angles(0, 0, math.rad(s * 35)), Color3.fromRGB(70, 48, 30), M.Wood), p)
+			else
+				p = leaf(m, Vector3.new(lw - 0.1, height, 0.15), cf, Color3.fromRGB(90, 96, 100), M.Metal)
+				p.Transparency = 0.45
+				for _, e in ipairs({ { 0, height / 2 - 0.15, lw, 0.25 }, { 0, -height / 2 + 0.15, lw, 0.25 }, { s * (lw / 2 - 0.15), 0, 0.25, height } }) do
+					weldTo(mk(m, "GateFrame", Vector3.new(e[3], e[4], 0.25), cf * CFrame.new(e[1], e[2], 0), Color3.fromRGB(70, 74, 78), M.Metal), p)
+				end
+			end
+			-- петля у столба; поворот наружу (от игрока)
+			local hinge = g * CFrame.new(s * width / 2, 0, 0)
+			table.insert(doors, { part = p, hinge = hinge, angle = math.rad(s * 100) })
 		end
-		local s = mk(m, "ExitSign", Vector3.new(7, 1.8, 0.3), cf * CFrame.new(0, 6.6, -0.2), Color3.fromRGB(20, 120, 50), M.Neon, NOCOL)
-		surfaceText(s, Enum.NormalId.Front, sign or "ВЫХОД", { color = Color3.fromRGB(230, 255, 230) })
+		doors.lampY = height + 2.6
+		return doors
+	end
+end
+
+-- рольставня / решётка, уезжающая вверх
+local function shutterGate(width, height, color, ribs)
+	return function(m, g)
+		local p = leaf(m, Vector3.new(width, height, 0.4), g * CFrame.new(0, height / 2, -0.4), color, M.Metal)
+		for i = 1, (ribs or 10) do
+			local y = -height / 2 + i * height / ((ribs or 10) + 1)
+			weldTo(mk(m, "Rib", Vector3.new(width, 0.2, 0.2), g * CFrame.new(0, height / 2 + y, -0.65), color:Lerp(BLACK, 0.3), M.Metal), p)
+		end
+		local doors = { { part = p, open = p.CFrame + Vector3.new(0, height - 0.6, 0) } }
+		doors.lampY = height + 1.2
+		return doors
+	end
+end
+
+-- раздвижные двери (одна или две створки уезжают вбок)
+local function slideGate(width, height, color, halves)
+	return function(m, g)
+		local doors = {}
+		if halves == 2 then
+			for _, s in ipairs({ -1, 1 }) do
+				local p = leaf(m, Vector3.new(width / 2, height, 0.5), g * CFrame.new(s * width / 4, height / 2, -0.3), color, M.Metal)
+				weldTo(mk(m, "Stripe", Vector3.new(width / 2, 0.6, 0.1), g * CFrame.new(s * width / 4, height * 0.35, -0.6), Color3.fromRGB(230, 180, 30), M.SmoothPlastic), p)
+				table.insert(doors, { part = p, open = p.CFrame * CFrame.new(s * width / 2, 0, 0) })
+			end
+		else
+			local p = leaf(m, Vector3.new(width, height, 0.4), g * CFrame.new(0, height / 2, -0.3), color, M.Metal)
+			weldTo(mk(m, "Handle", Vector3.new(0.2, 1.2, 0.2), g * CFrame.new(width * 0.35, height * 0.45, -0.6), Color3.fromRGB(200, 200, 205), M.Metal), p)
+			table.insert(doors, { part = p, open = p.CFrame * CFrame.new(width, 0, 0) })
+		end
+		doors.lampY = height + 1.2
+		return doors
 	end
 end
 
 ------------------------------------------------------------------------
--- КАРТРИДЖ 1: ХОЛМЫ РАДОСТИ (проклятый уровень платформера)
+-- КАРТЫ
 ------------------------------------------------------------------------
-local CHK_A = Color3.fromRGB(150, 84, 34)
-local CHK_B = Color3.fromRGB(92, 48, 22)
-local GRASS_TOP = Color3.fromRGB(66, 120, 48)
-local GRASS_DARK = Color3.fromRGB(40, 84, 34)
+local MAPS = {}
+do
+	--------------------------------------------------------------------
+	-- ТУМАННЫЙ ЛЕС: ночная лесопилка, водонапорная башня, домик лесника, лагерь
+	--------------------------------------------------------------------
+	local function buildForest(o)
+		local def = newMap(MAP_INFO[1], o, 116)
+		local m = def.model
+		local r = Random.new(11)
+		local function B(...) return box(m, o, ...) end
+		local exits = {
+			{ x = 40, z = -112, normal = Vector3.new(0, 0, 1), label = "ВОРОТА ЛЕСОПИЛКИ" },
+			{ x = 112, z = 15, normal = Vector3.new(-1, 0, 0), label = "СТАРЫЙ ТОННЕЛЬ" },
+			{ x = -112, z = -50, normal = Vector3.new(1, 0, 0), label = "КПП ЛЕСНИЧЕСТВА" },
+		}
+		-- ландшафт: земля, холмы-стены вокруг, проходы к воротам
+		terra("FillBlock", CFrame.new(o + Vector3.new(0, -10, 0)), Vector3.new(600, 20, 600), M.Grass)
+		local ringExits = {}
+		for _, e in ipairs(exits) do
+			table.insert(ringExits, { pos = Vector3.new(e.x, 0, e.z) - e.normal * 6, normal = e.normal })
+		end
+		hillRing(o, 152, { M.Rock, M.Grass, M.Rock }, r, ringExits, 20)
+		-- холмы внутри: подъёмы и укрытия
+		terra("FillBall", o + Vector3.new(70, -18, 40), 30, M.Rock)
+		terra("FillBall", o + Vector3.new(-25, -17, 45), 26, M.Grass)
+		terra("FillBall", o + Vector3.new(-80, -20, -75), 26, M.Grass)
+		reserve(def, 70, 40, 26)
+		reserve(def, -25, 45, 22)
+		reserve(def, -80, -75, 20)
+		-- тропы
+		local function path(a, b, w)
+			local mid = (a + b) / 2
+			terra("FillBlock", CFrame.lookAt(o + Vector3.new(mid.X, -1.5, mid.Z), o + Vector3.new(b.X, -1.5, b.Z)), Vector3.new(w or 9, 3, (b - a).Magnitude), M.Mud)
+		end
+		path(Vector3.new(0, 0, 105), Vector3.new(0, 0, -10))
+		path(Vector3.new(0, 0, -10), Vector3.new(40, 0, -112))
+		path(Vector3.new(0, 0, -10), Vector3.new(-112, 0, -50))
+		path(Vector3.new(0, 0, -10), Vector3.new(112, 0, 15))
+		path(Vector3.new(-65, 0, -25), Vector3.new(-70, 0, 70))
 
--- плато с шахматными боками и травяной шапкой; возвращает высоту верха
-local function checkerBlock(def, cx, cz, w, d, h, y0)
-	y0 = y0 or 0
-	local o = def.origin
-	local m = def.model
-	mk(m, "Plateau", Vector3.new(w, h, d), o + Vector3.new(cx, y0 + h / 2, cz), CHK_B, M.SmoothPlastic)
-	local T = 4
-	local function side(alongX, sign)
-		local len = alongX and w or d
-		local cols = math.max(1, math.floor(len / T + 0.5))
-		local tw = len / cols
-		local rows = math.max(1, math.floor(h / T + 0.5))
-		local th = h / rows
-		for i = 0, cols - 1 do
-			for j = 0, rows - 1 do
-				if (i + j) % 2 == 0 then
-					local along = -len / 2 + (i + 0.5) * tw
-					local yy = y0 + (j + 0.5) * th
-					if alongX then
-						mk(m, "Chk", Vector3.new(tw, th, 0.12), o + Vector3.new(cx + along, yy, cz + sign * (d / 2 + 0.06)), CHK_A, M.SmoothPlastic, FLAT)
+		-- ворота
+		addEscape(def, exits[1].x, exits[1].z, exits[1].label, exits[1].normal, swingGate(14, 9, "metal"))
+		addEscape(def, exits[2].x, exits[2].z, exits[2].label, exits[2].normal, function(gm, g)
+			-- портал тоннеля в скале: бетонная арка, внутри темнота и лампы
+			for _, s in ipairs({ -1, 1 }) do
+				mk(gm, "Portal", Vector3.new(4, 14, 3), g * CFrame.new(s * 8.5, 7, 1), Color3.fromRGB(110, 108, 104), M.Concrete)
+			end
+			mk(gm, "PortalTop", Vector3.new(21, 4, 3), g * CFrame.new(0, 15, 1), Color3.fromRGB(110, 108, 104), M.Concrete)
+			local sign = mk(gm, "TunnelSign", Vector3.new(10, 2, 0.3), g * CFrame.new(0, 15, -0.7), Color3.fromRGB(30, 30, 32), M.SmoothPlastic, NOCOL)
+			surfaceText(sign, Enum.NormalId.Front, "ТОННЕЛЬ №3", { color = Color3.fromRGB(220, 210, 180) })
+			mk(gm, "TunnelFloor", Vector3.new(13, 1, 60), g * CFrame.new(0, -0.4, 31), Color3.fromRGB(60, 58, 56), M.Concrete)
+			mk(gm, "TunnelRoof", Vector3.new(17, 1, 60), g * CFrame.new(0, 13.5, 31), Color3.fromRGB(60, 58, 56), M.Concrete)
+			for _, s in ipairs({ -1, 1 }) do
+				mk(gm, "TunnelWall", Vector3.new(1, 14, 60), g * CFrame.new(s * 7, 7, 31), Color3.fromRGB(70, 68, 64), M.Concrete)
+			end
+			for i = 1, 3 do
+				local l = mk(gm, "TunnelLamp", Vector3.new(1, 0.4, 1), g * CFrame.new(0, 13, i * 16), Color3.fromRGB(255, 170, 80), M.Neon, NOCOL)
+				pointLight(l, Color3.fromRGB(255, 160, 80), 16, 1)
+			end
+			return shutterGate(13, 12, Color3.fromRGB(60, 50, 44), 6)(gm, g)
+		end)
+		addEscape(def, exits[3].x, exits[3].z, exits[3].label, exits[3].normal, function(gm, g)
+			-- КПП: будка со шлагбаумом и откатные ворота
+			mk(gm, "Booth", Vector3.new(5, 8, 5), g * CFrame.new(11, 4, 2), Color3.fromRGB(90, 110, 80), M.WoodPlanks)
+			mk(gm, "BoothRoof", Vector3.new(6, 0.6, 6), g * CFrame.new(11, 8.3, 2), Color3.fromRGB(50, 50, 50), M.Metal)
+			local win = mk(gm, "BoothWindow", Vector3.new(3, 2, 0.2), g * CFrame.new(11, 5, -0.55), Color3.fromRGB(255, 200, 120), M.Neon, NOCOL)
+			pointLight(win, Color3.fromRGB(255, 190, 110), 14, 0.8)
+			local s = mk(gm, "Sign", Vector3.new(7, 1.6, 0.2), g * CFrame.new(-11, 6, 0), Color3.fromRGB(240, 240, 230), M.SmoothPlastic)
+			surfaceText(s, Enum.NormalId.Front, "ПРОЕЗД ЗАКРЫТ", { color = Color3.fromRGB(180, 20, 20) })
+			mk(gm, "SignPost", Vector3.new(0.3, 5, 0.3), g * CFrame.new(-11, 2.5, 0.2), Color3.fromRGB(70, 70, 70), M.Metal)
+			return slideGate(14, 8, Color3.fromRGB(90, 96, 90), 1)(gm, g)
+		end)
+		-- заборы у ворот (закрывают щели прохода)
+		for _, e in ipairs(exits) do
+			local g = CFrame.lookAt(o + Vector3.new(e.x, 0, e.z) - e.normal * 6, o + Vector3.new(e.x, 0, e.z))
+			for _, s in ipairs({ -1, 1 }) do
+				mk(m, "Fence", Vector3.new(4, 9, 0.3), g * CFrame.new(s * 10, 4.5, 0), Color3.fromRGB(80, 84, 88), M.Metal, { Transparency = 0.4 })
+			end
+		end
+
+		-- водонапорная башня (лестница на площадку — вертикальная петля)
+		do
+			local c = o + Vector3.new(0, 0, -10)
+			for _, s in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
+				local foot = c + Vector3.new(s[1] * 8, 0, s[2] * 8)
+				local top = c + Vector3.new(s[1] * 6, 26, s[2] * 6)
+				beam(m, "TowerLeg", foot, top, 1, Color3.fromRGB(40, 44, 48), M.Metal)
+				mk(m, "Footing", Vector3.new(2.4, 1, 2.4), foot + Vector3.new(0, 0.5, 0), Color3.fromRGB(90, 90, 88), M.Concrete)
+			end
+			for _, y in ipairs({ 9, 18 }) do
+				local k = 8 - y / 26 * 2
+				for _, side in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }) do
+					local a, b
+					if side[1] ~= 0 then
+						a = c + Vector3.new(side[1] * k, y - 6, -k)
+						b = c + Vector3.new(side[1] * k, y + 2, k)
 					else
-						mk(m, "Chk", Vector3.new(0.12, th, tw), o + Vector3.new(cx + sign * (w / 2 + 0.06), yy, cz + along), CHK_A, M.SmoothPlastic, FLAT)
+						a = c + Vector3.new(-k, y - 6, side[2] * k)
+						b = c + Vector3.new(k, y + 2, side[2] * k)
+					end
+					beam(m, "Brace", a, b, 0.4, Color3.fromRGB(40, 44, 48), M.Metal)
+				end
+			end
+			-- площадка-кольцо с перилами
+			for i = 0, 7 do
+				local a = i / 8 * math.pi * 2
+				local cf = CFrame.new(c + Vector3.new(0, 26, 0)) * CFrame.Angles(0, a, 0)
+				mk(m, "Catwalk", Vector3.new(8.6, 0.6, 3.4), cf * CFrame.new(0, 0, -9.5), Color3.fromRGB(60, 62, 64), M.DiamondPlate)
+				mk(m, "CatwalkRail", Vector3.new(8.6, 0.25, 0.25), cf * CFrame.new(0, 3.5, -11.1), Color3.fromRGB(60, 62, 64), M.Metal)
+				mk(m, "CatwalkPost", Vector3.new(0.25, 3.5, 0.25), cf * CFrame.new(4.2, 1.75, -11.1), Color3.fromRGB(60, 62, 64), M.Metal)
+			end
+			mk(m, "CatwalkFloor", Vector3.new(13, 0.6, 13), c + Vector3.new(0, 26, 0), Color3.fromRGB(60, 62, 64), M.DiamondPlate)
+			cyl(m, "Tank", 12, 17, c + Vector3.new(0, 33, 0), Color3.fromRGB(46, 50, 54), M.CorrodedMetal)
+			cyl(m, "TankRoof", 1.2, 18, c + Vector3.new(0, 39.5, 0), Color3.fromRGB(36, 40, 44), M.Metal)
+			cyl(m, "TankCap", 2, 6, c + Vector3.new(0, 41, 0), Color3.fromRGB(36, 40, 44), M.Metal)
+			local lamp = ball(m, "TowerLamp", 1.4, c + Vector3.new(0, 42.6, 0), Color3.fromRGB(200, 240, 255), M.Neon, NOCOL)
+			pointLight(lamp, Color3.fromRGB(180, 220, 255), 40, 1.2)
+			tag(lamp, "P2D_Blink", { Rate = 0.4 })
+			ladder(m, c + Vector3.new(9.5, 0, 0), 26)
+			mk(m, "LadderLanding", Vector3.new(3, 0.6, 3), c + Vector3.new(9.5, 26, 0), Color3.fromRGB(60, 62, 64), M.DiamondPlate)
+			floodlight(m, c + Vector3.new(12, 0, 22), c, Color3.fromRGB(150, 240, 255))
+			-- обломки заборов и ящики у подножья
+			for _, p in ipairs({ { -14, 4 }, { -12, -14 }, { 14, -14 } }) do
+				mk(m, "BrokenFence", Vector3.new(8, 4, 0.3), CFrame.new(c + Vector3.new(p[1], 2, p[2])) * CFrame.Angles(0, r:NextNumber(0, 3), math.rad(r:NextNumber(-12, 12))),
+					Color3.fromRGB(80, 84, 88), M.Metal, { Transparency = 0.35 })
+			end
+			crate(m, c + Vector3.new(-6, 0, 14), 4, 0.3)
+			crate(m, c + Vector3.new(-2, 0, 15), 3.5, 0.9)
+			reserve(def, 0, -10, 16)
+		end
+
+		-- домик лесника: два входа (петля), телевизор с помехами
+		do
+			local x1, x2, z1, z2 = -77, -53, -34, -16
+			local wallC = Color3.fromRGB(86, 62, 42)
+			room(m, o, x1, x2, z1, z2, 10, wallC, M.WoodPlanks,
+				{ E = { { c = -25, w = 6 } }, W = { { c = -25, w = 6 } }, N = { { c = -65, w = 3, h = 4 } }, S = { { c = -60, w = 3, h = 4 } } },
+				{ noRoof = true, lampColor = Color3.fromRGB(255, 170, 90), flicker = true })
+			B("CabinFloor", x1, x2, 0, 0.3, z1, z2, Color3.fromRGB(70, 50, 34), M.WoodPlanks)
+			B("Ceiling", x1, x2, 10, 10.5, z1, z2, Color3.fromRGB(60, 44, 30), M.WoodPlanks)
+			gableRoof(m, o + Vector3.new((x1 + x2) / 2, 10.5, (z1 + z2) / 2), x2 - x1 + 2, z2 - z1 + 2, 6, Color3.fromRGB(46, 34, 30), M.WoodPlanks, true)
+			B("Porch", x2, x2 + 6, 0, 0.8, z1 + 2, z2 - 2, Color3.fromRGB(90, 66, 44), M.WoodPlanks)
+			B("Bunk", x1 + 1, x1 + 5, 0, 2.5, z1 + 1, z1 + 9, Color3.fromRGB(110, 80, 60), M.Wood)
+			B("Table", -66, -62, 0, 3, -21, -18, Color3.fromRGB(100, 72, 48), M.Wood)
+			local tv = B("TV", -76, -72.5, 3, 6, -31, -28, Color3.fromRGB(40, 38, 42), M.SmoothPlastic)
+			local scr = mk(m, "TVScreen", Vector3.new(0.1, 2.2, 2.4), tv.Position + Vector3.new(1.8, 0, 0), Color3.fromRGB(150, 170, 200), M.Neon, NOCOL)
+			tag(scr, "P2D_Flicker", { Strong = true })
+			pointLight(scr, Color3.fromRGB(150, 170, 255), 12, 0.8)
+			B("TVStand", -76, -72, 0, 3, -32, -27, Color3.fromRGB(70, 50, 34), M.Wood)
+			local porchLamp = B("PorchLamp", x2 + 0.2, x2 + 0.8, 7, 8, -26, -24, Color3.fromRGB(255, 190, 110), M.Neon, NOCOL)
+			pointLight(porchLamp, Color3.fromRGB(255, 170, 90), 22, 1.4)
+			tag(porchLamp, "P2D_Flicker")
+			floodlight(m, o + Vector3.new(-40, 0, -8), o + Vector3.new(-60, 2, -25))
+			reserve(def, -65, -25, 20)
+		end
+
+		-- лагерь: палатки, кострище, фургон
+		do
+			local function tent(cx, cz, yaw, col)
+				local base = CFrame.new(o + Vector3.new(cx, 0, cz)) * CFrame.Angles(0, yaw, 0)
+				local size = Vector3.new(7, 5, 3.5)
+				mkc("WedgePart", m, "Tent", size, base * CFrame.new(0, 2.5, -1.75), col, M.Fabric)
+				mkc("WedgePart", m, "Tent", size, base * CFrame.new(0, 2.5, 1.75) * CFrame.Angles(0, math.pi, 0), col, M.Fabric)
+				reserve(def, cx, cz, 5)
+			end
+			tent(-85, 60, 0.3, Color3.fromRGB(60, 90, 60))
+			tent(-62, 82, -0.6, Color3.fromRGB(140, 60, 40))
+			tent(-92, 85, 1.2, Color3.fromRGB(60, 70, 110))
+			local fire = o + Vector3.new(-72, 0, 72)
+			for i = 0, 7 do
+				local a = i / 8 * math.pi * 2
+				boulder(m, fire + Vector3.new(math.cos(a) * 2.6, 0, math.sin(a) * 2.6), 1.1, r)
+			end
+			local embers = ball(m, "Embers", 1.6, fire + Vector3.new(0, 0.2, 0), Color3.fromRGB(255, 90, 30), M.Neon, NOCOL)
+			pointLight(embers, Color3.fromRGB(255, 110, 40), 16, 1.2)
+			tag(embers, "P2D_Flicker")
+			B("Picnic", -60, -54, 0, 3, 62, 66, Color3.fromRGB(90, 66, 44), M.Wood)
+			-- фургон (большой объект для петель)
+			local van = CFrame.new(o + Vector3.new(-42, 0, 52)) * CFrame.Angles(0, math.rad(20), 0)
+			mk(m, "Camper", Vector3.new(8, 8, 20), van * CFrame.new(0, 4.8, 0), Color3.fromRGB(200, 196, 180), M.Metal)
+			mk(m, "CamperStripe", Vector3.new(8.1, 0.8, 20.1), van * CFrame.new(0, 4, 0), Color3.fromRGB(140, 60, 40), M.SmoothPlastic, NOCOL)
+			mk(m, "CamperWin", Vector3.new(8.15, 1.6, 12), van * CFrame.new(0, 6.4, 1), Color3.fromRGB(20, 24, 30), M.Glass, NOCOL)
+			for _, w in ipairs({ { -4, -6 }, { 4, -6 }, { -4, 6 }, { 4, 6 } }) do
+				mk(m, "Wheel", Vector3.new(1.2, 3, 3), van * CFrame.new(w[1], 1.5, w[2]), Color3.fromRGB(18, 18, 18), M.SmoothPlastic, { Shape = CYL })
+			end
+			reserve(def, -42, 52, 13)
+			reserve(def, -72, 72, 6)
+			floodlight(m, o + Vector3.new(-50, 0, 90), fire)
+		end
+
+		-- лесопилка: навес с погрузочной платформой и пандусом, штабеля брёвен, лесовоз
+		do
+			local x1, x2, z1, z2 = 44, 78, -82, -60
+			for _, x in ipairs({ x1, (x1 + x2) / 2, x2 }) do
+				for _, z in ipairs({ z1, z2 }) do
+					B("ShedPost", x - 0.6, x + 0.6, 0, 12, z - 0.6, z + 0.6, Color3.fromRGB(70, 52, 36), M.Wood)
+				end
+			end
+			B("ShedRoof", x1 - 2, x2 + 2, 12, 12.8, z1 - 2, z2 + 2, Color3.fromRGB(60, 56, 52), M.CorrodedMetal)
+			B("LoadDeck", x1 + 2, x2 - 10, 0, 4, z1 + 2, z2 - 2, Color3.fromRGB(90, 70, 48), M.WoodPlanks)
+			ramp(m, o + Vector3.new(x2 - 5, 0, (z1 + z2) / 2), 8, 4, 10, Vector3.new(-1, 0, 0), Color3.fromRGB(90, 70, 48), M.WoodPlanks)
+			B("Saw", x1 + 8, x1 + 18, 4, 6, z1 + 6, z1 + 9, Color3.fromRGB(60, 60, 64), M.Metal)
+			local blade = mk(m, "SawBlade", Vector3.new(0.3, 5, 5), CFrame.new(o + Vector3.new(x1 + 13, 6.5, z1 + 7.5)) * ALONG_Z, Color3.fromRGB(180, 180, 186), M.Metal, { Shape = CYL })
+			blade.CanCollide = false
+			local bulb = B("ShedLamp", 60, 62, 11, 11.6, -72, -70, Color3.fromRGB(255, 200, 120), M.Neon, NOCOL)
+			pointLight(bulb, Color3.fromRGB(255, 180, 100), 26, 1.2)
+			tag(bulb, "P2D_Flicker")
+			local function logPile(cx, cz, yaw, rows)
+				local base = CFrame.new(o + Vector3.new(cx, 0, cz)) * CFrame.Angles(0, yaw, 0)
+				for row = 0, rows - 1 do
+					for k = 0, rows - 1 - row do
+						local x = (k - (rows - 1 - row) / 2) * 2.4
+						mk(m, "Log", Vector3.new(16, 2.4, 2.4), base * CFrame.new(0, 1.2 + row * 2.1, x), Color3.fromRGB(96, 70, 46), M.Wood, { Shape = CYL })
+					end
+				end
+				reserve(def, cx, cz, 9)
+			end
+			logPile(30, -92, 0.1, 4)
+			logPile(92, -40, 1.5, 3)
+			logPile(26, -55, -0.3, 3)
+			-- лесовоз
+			local truck = CFrame.new(o + Vector3.new(88, 0, -12)) * CFrame.Angles(0, math.rad(10), 0)
+			mk(m, "TruckCab", Vector3.new(8, 8, 7), truck * CFrame.new(0, 4.5, -12), Color3.fromRGB(120, 30, 26), M.Metal)
+			mk(m, "TruckWin", Vector3.new(8.1, 2, 4), truck * CFrame.new(0, 6.5, -13), Color3.fromRGB(20, 24, 30), M.Glass, NOCOL)
+			mk(m, "TruckBed", Vector3.new(8, 1.2, 20), truck * CFrame.new(0, 2.4, 2), Color3.fromRGB(50, 50, 54), M.Metal)
+			for k = -1, 1 do
+				mk(m, "TruckLog", Vector3.new(19, 2.6, 2.6), truck * CFrame.new(k * 2.6, 4.3, 2) * ALONG_Z, Color3.fromRGB(96, 70, 46), M.Wood, { Shape = CYL })
+			end
+			for _, w in ipairs({ { -4, -12 }, { 4, -12 }, { -4, 6 }, { 4, 6 }, { -4, 10 }, { 4, 10 } }) do
+				mk(m, "Wheel", Vector3.new(1.4, 3.6, 3.6), truck * CFrame.new(w[1], 1.8, w[2]), Color3.fromRGB(18, 18, 18), M.SmoothPlastic, { Shape = CYL })
+			end
+			reserve(def, 61, -71, 22)
+			reserve(def, 88, -12, 16)
+			floodlight(m, o + Vector3.new(38, 0, -46), o + Vector3.new(60, 0, -72), Color3.fromRGB(255, 220, 170))
+		end
+
+		-- скалистый холм со смотровой площадкой
+		do
+			local top = o + Vector3.new(70, 0, 40)
+			local y = groundY(top + Vector3.new(0, 20, 0))
+			mk(m, "Lookout", Vector3.new(8, 0.6, 8), Vector3.new(top.X, y + 0.3, top.Z), Color3.fromRGB(90, 66, 44), M.WoodPlanks)
+			railing(m, Vector3.new(top.X - 4, y + 0.6, top.Z - 4), Vector3.new(top.X + 4, y + 0.6, top.Z - 4), 3, Color3.fromRGB(70, 52, 36))
+			railing(m, Vector3.new(top.X + 4, y + 0.6, top.Z - 4), Vector3.new(top.X + 4, y + 0.6, top.Z + 4), 3, Color3.fromRGB(70, 52, 36))
+			for _ = 1, 6 do
+				local p = top + Vector3.new(r:NextNumber(-22, 22), 0, r:NextNumber(-22, 22))
+				boulder(m, Vector3.new(p.X, groundY(p + Vector3.new(0, 30, 0)) - 1, p.Z), r:NextNumber(4, 8), r)
+			end
+		end
+
+		-- остов школьного автобуса
+		do
+			local bus = CFrame.new(o + Vector3.new(52, 0, 74)) * CFrame.Angles(0, math.rad(32), math.rad(4))
+			mk(m, "Bus", Vector3.new(8.5, 8, 28), bus * CFrame.new(0, 5, 0), Color3.fromRGB(176, 130, 30), M.CorrodedMetal)
+			mk(m, "BusWin", Vector3.new(8.6, 2.2, 22), bus * CFrame.new(0, 6.8, 1), Color3.fromRGB(16, 18, 22), M.Glass, NOCOL)
+			mk(m, "BusStripe", Vector3.new(8.6, 0.5, 28.1), bus * CFrame.new(0, 4.4, 0), Color3.fromRGB(30, 30, 30), M.SmoothPlastic, NOCOL)
+			for _, w in ipairs({ { -4.3, -9 }, { 4.3, -9 }, { -4.3, 9 }, { 4.3, 9 } }) do
+				mk(m, "Wheel", Vector3.new(1.2, 3, 3), bus * CFrame.new(w[1], 1.5, w[2]), Color3.fromRGB(18, 18, 18), M.SmoothPlastic, { Shape = CYL })
+			end
+			reserve(def, 52, 74, 17)
+		end
+
+		-- поваленные деревья (перепрыгнуть) и валуны
+		for _, l in ipairs({ { -30, -60, 0.3 }, { 30, 20, 1.2 }, { -95, 5, 2 }, { -12, 70, 0.8 }, { 95, 85, 2.4 } }) do
+			mk(m, "FallenTree", Vector3.new(18, 2.6, 2.6), CFrame.new(o + Vector3.new(l[1], 1.3, l[2])) * CFrame.Angles(0, l[3], 0), Color3.fromRGB(64, 46, 32), M.Wood, { Shape = CYL })
+			reserve(def, l[1], l[2], 6)
+		end
+		floodlight(m, o + Vector3.new(20, 0, 98), o + Vector3.new(0, 0, 70), Color3.fromRGB(255, 230, 190))
+
+		-- спавны: выжившие на юге, Палач у лесопилки
+		for _, p in ipairs({ { -20, 98 }, { 0, 104 }, { 20, 100 }, { -40, 104 }, { 35, 92 } }) do addSpawn(def, "Survivor", p[1], p[2]) end
+		for _, p in ipairs({ { 60, -94 }, { 82, -88 }, { 46, -100 } }) do addSpawn(def, "Killer", p[1], p[2]) end
+
+		-- деревья: в зоне — укрытия, на холмах по краю — стена леса
+		scatter(def, r, 34, 108, 5, function(x, z)
+			pine(m, o + Vector3.new(x, 0, z), r:NextNumber(26, 40), r)
+			reserve(def, x, z, 2)
+		end)
+		scatter(def, r, 26, 110, 3, function(x, z)
+			bush(m, o + Vector3.new(x, 0, z), r, Color3.fromRGB(28, 44, 30))
+		end)
+		for _ = 1, 110 do
+			local side = r:NextInteger(1, 4)
+			local t = r:NextNumber(-190, 190)
+			local d = r:NextNumber(124, 200)
+			local x, z
+			if side == 1 then x, z = t, -d elseif side == 2 then x, z = t, d elseif side == 3 then x, z = -d, t else x, z = d, t end
+			local nearExit = false
+			for _, e in ipairs(exits) do
+				if (Vector3.new(x, 0, z) - Vector3.new(e.x, 0, e.z) + e.normal * 40).Magnitude < 40 then nearExit = true end
+			end
+			if not nearExit then
+				local p = o + Vector3.new(x, 0, z)
+				pine(m, Vector3.new(p.X, groundY(p + Vector3.new(0, 40, 0)) - 1, p.Z), r:NextNumber(34, 52), r, 2)
+			end
+		end
+		return def
+	end
+
+	--------------------------------------------------------------------
+	-- КОМПЛЕКС: закрытый завод (пол, стены, потолок), антресоль с мостом, контейнеры
+	--------------------------------------------------------------------
+	local function buildComplex(o)
+		local def = newMap(MAP_INFO[2], o, 118)
+		def.beamH = 0
+		local m = def.model
+		local r = Random.new(21)
+		local function B(...) return box(m, o, ...) end
+		local H = 32
+		local FLOOR = Color3.fromRGB(28, 30, 36)
+		local WALL = Color3.fromRGB(44, 48, 58)
+		local STEEL = Color3.fromRGB(58, 62, 72)
+		local YEL = Color3.fromRGB(230, 180, 30)
+		local REDL = Color3.fromRGB(255, 40, 40)
+
+		B("Floor", -124, 124, -2, 0, -124, 124, FLOOR, M.SmoothPlastic)
+		for k = -112, 112, 8 do
+			B("Grid", k - 0.08, k + 0.08, 0, 0.03, -120, 120, Color3.fromRGB(64, 72, 92), M.SmoothPlastic, FLAT)
+			B("Grid", -120, 120, 0, 0.03, k - 0.08, k + 0.08, Color3.fromRGB(64, 72, 92), M.SmoothPlastic, FLAT)
+		end
+		-- наружные стены с проёмами под выходы
+		local function outer(a, b, gaps)
+			wallWithGaps(m, o + a, o + b, H, 2, WALL, M.DiamondPlate, gaps)
+		end
+		outer(Vector3.new(-122, 0, -121), Vector3.new(122, 0, -121), {})
+		outer(Vector3.new(-122, 0, 121), Vector3.new(122, 0, 121), { { t = 202, w = 14, h = 12 } })      -- x = 80
+		outer(Vector3.new(-121, 0, -122), Vector3.new(-121, 0, 122), { { t = 182, w = 6, h = 9 } })      -- z = 60
+		outer(Vector3.new(121, 0, -122), Vector3.new(121, 0, 122), { { t = 42, w = 10, h = 10 } })       -- z = -80
+		B("Ceiling", -124, 124, H, H + 2, -124, 124, Color3.fromRGB(22, 24, 28), M.Metal)
+		for x = -100, 100, 20 do
+			B("CeilBeam", x - 0.8, x + 0.8, H - 2, H, -120, 120, Color3.fromRGB(36, 38, 44), M.Metal)
+		end
+		for t = -100, 100, 25 do
+			for _, s in ipairs({ -1, 1 }) do
+				B("Pilaster", s * 120 - 1, s * 120 + 1, 0, H, t - 1, t + 1, STEEL, M.Metal)
+				B("Pilaster", t - 1, t + 1, 0, H, s * 120 - 1, s * 120 + 1, STEEL, M.Metal)
+			end
+		end
+		B("PipeN", -118, 118, 22, 23.6, -119, -117.4, Color3.fromRGB(90, 60, 40), M.Metal)
+		B("PipeE", 117.4, 119, 20, 21.6, -118, 118, Color3.fromRGB(60, 80, 90), M.Metal)
+		-- коридорчики за проёмами (видно, что выход куда-то ведёт)
+		local function vestibule(cx, cz, nx, nz, w, h)
+			local back = o + Vector3.new(cx, 0, cz) - Vector3.new(nx, 0, nz) * 9
+			local across = Vector3.new(math.abs(nz), 0, math.abs(nx))
+			local along = Vector3.new(math.abs(nx), 0, math.abs(nz))
+			mk(m, "VestFloor", across * (w + 2) + along * 14 + Vector3.new(0, 1, 0), back - Vector3.new(0, 0.5, 0), FLOOR, M.SmoothPlastic)
+			mk(m, "VestRoof", across * (w + 2) + along * 14 + Vector3.new(0, 1, 0), back + Vector3.new(0, h + 0.5, 0), WALL, M.Metal)
+			for _, s in ipairs({ -1, 1 }) do
+				mk(m, "VestWall", across + along * 14 + Vector3.new(0, h, 0), back + across * (s * (w / 2 + 1)) + Vector3.new(0, h / 2, 0), WALL, M.DiamondPlate)
+			end
+			mk(m, "VestEnd", across * (w + 2) + along + Vector3.new(0, h, 0), back - Vector3.new(nx, 0, nz) * 7 + Vector3.new(0, h / 2, 0), WALL, M.DiamondPlate)
+			local l = mk(m, "VestLamp", Vector3.new(2, 0.4, 2), back + Vector3.new(0, h - 0.3, 0), Color3.fromRGB(180, 255, 200), M.Neon, NOCOL)
+			pointLight(l, Color3.fromRGB(150, 255, 180), 14, 1)
+		end
+		vestibule(80, 121, 0, -1, 14, 12)
+		vestibule(-121, 60, 1, 0, 6, 9)
+		vestibule(121, -80, -1, 0, 10, 10)
+		addEscape(def, 80, 115, "ГРУЗОВЫЕ ВОРОТА", Vector3.new(0, 0, -1), shutterGate(14, 12, Color3.fromRGB(120, 116, 104), 12))
+		addEscape(def, -115, 60, "АВАРИЙНЫЙ ВЫХОД", Vector3.new(1, 0, 0), function(gm, g)
+			local s = mk(gm, "ExitSign", Vector3.new(4, 1.2, 0.3), g * CFrame.new(0, 10.6, -0.8), Color3.fromRGB(20, 140, 60), M.Neon, NOCOL)
+			surfaceText(s, Enum.NormalId.Front, "ВЫХОД", { color = Color3.fromRGB(230, 255, 230) })
+			return slideGate(6, 9, Color3.fromRGB(150, 40, 36), 1)(gm, g)
+		end)
+		addEscape(def, 115, -80, "ШЛЮЗ", Vector3.new(-1, 0, 0), slideGate(10, 10, Color3.fromRGB(70, 76, 86), 2))
+
+		-- антресоль на севере (над офисами), пандусы, мост через цех и южная площадка
+		B("Mezzanine", -110, 30, 9, 10, -120, -100, STEEL, M.DiamondPlate)
+		for x = -100, 20, 20 do B("Column", x - 0.8, x + 0.8, 0, 9, -101.6, -100, STEEL, M.Metal) end
+		railing(m, o + Vector3.new(-104, 10, -100), o + Vector3.new(-3, 10, -100), 3.5, YEL)
+		railing(m, o + Vector3.new(3, 10, -100), o + Vector3.new(24, 10, -100), 3.5, YEL)
+		ramp(m, o + Vector3.new(-107, 0, -87), 6, 10, 26, Vector3.new(0, 0, -1), STEEL, M.DiamondPlate)
+		ramp(m, o + Vector3.new(27, 0, -87), 6, 10, 26, Vector3.new(0, 0, -1), STEEL, M.DiamondPlate)
+		B("Bridge", -3, 3, 9, 10, -100, 40, STEEL, M.DiamondPlate)
+		railing(m, o + Vector3.new(-3, 10, -100), o + Vector3.new(-3, 10, 40), 3.5, YEL)
+		railing(m, o + Vector3.new(3, 10, -100), o + Vector3.new(3, 10, 40), 3.5, YEL)
+		for _, z in ipairs({ -60, -20, 20 }) do B("BridgeLeg", -0.6, 0.6, 0, 9, z - 0.6, z + 0.6, STEEL, M.Metal) end
+		B("SouthDeck", -30, 30, 9, 10, 40, 56, STEEL, M.DiamondPlate)
+		for _, c in ipairs({ { -29, 41 }, { 29, 41 }, { -29, 55 }, { 29, 55 } }) do B("DeckLeg", c[1] - 0.7, c[1] + 0.7, 0, 9, c[2] - 0.7, c[2] + 0.7, STEEL, M.Metal) end
+		railing(m, o + Vector3.new(-30, 10, 40), o + Vector3.new(-3, 10, 40), 3.5, YEL)
+		railing(m, o + Vector3.new(3, 10, 40), o + Vector3.new(30, 10, 40), 3.5, YEL)
+		railing(m, o + Vector3.new(-30, 10, 56), o + Vector3.new(30, 10, 56), 3.5, YEL)
+		railing(m, o + Vector3.new(-30, 10, 40), o + Vector3.new(-30, 10, 56), 3.5, YEL)
+		ramp(m, o + Vector3.new(43, 0, 48), 6, 10, 26, Vector3.new(-1, 0, 0), STEEL, M.DiamondPlate)
+		for _, p in ipairs({ { -107, -76 }, { 27, -76 }, { 57, 48 } }) do
+			for k = 0, 3 do
+				B("Hazard", p[1] - 3 + k * 1.5, p[1] - 2.25 + k * 1.5, 0, 0.04, p[2] - 1, p[2] + 1, k % 2 == 0 and YEL or BLACK, M.SmoothPlastic, FLAT)
+			end
+		end
+		reserve(def, 0, -40, 4)
+
+		-- офисы под антресолью
+		for i, cx in ipairs({ -90, -50, -10 }) do
+			room(m, o, cx - 17, cx + 17, -119, -102.4, 8.4, Color3.fromRGB(70, 74, 84), M.SmoothPlastic,
+				{ S = { { c = cx + (i == 2 and -8 or 8), w = 6 } } }, { lampColor = Color3.fromRGB(200, 220, 255), flicker = i == 2, lampBrightness = 0.8 })
+			B("Desk", cx - 6, cx + 2, 0, 3, -115, -111, Color3.fromRGB(90, 80, 70), M.Wood)
+			local mon = B("Monitor", cx - 4, cx - 1, 3, 5.4, -114.5, -112.5, Color3.fromRGB(40, 40, 44), M.SmoothPlastic)
+			local scr = mk(m, "MonitorScreen", Vector3.new(2.4, 1.8, 0.1), mon.Position + Vector3.new(0, 0, 1.05), Color3.fromRGB(120, 200, 150), M.Neon, NOCOL)
+			tag(scr, "P2D_Flicker", { Strong = true })
+			B("Cabinet", cx + 10, cx + 14, 0, 6, -118, -115, Color3.fromRGB(80, 84, 90), M.Metal)
+		end
+		for _, p in ipairs({ { -80, -92 }, { -50, -92 }, { -20, -92 }, { -100, -84 }, { 8, -92 } }) do addSpawn(def, "Survivor", p[1], p[2]) end
+
+		-- контейнерный двор (некоторые — сквозные)
+		local function container(cx, cz, alongX, col, open)
+			local cf = CFrame.new(o + Vector3.new(cx, 0, cz)) * (alongX and CFrame.Angles(0, math.rad(90), 0) or CFrame.identity)
+			if open then
+				for _, s in ipairs({ -1, 1 }) do
+					mk(m, "ContainerSide", Vector3.new(0.4, 8.5, 24), cf * CFrame.new(s * 4, 4.25, 0), col, M.CorrodedMetal)
+				end
+				mk(m, "ContainerTop", Vector3.new(8.4, 0.4, 24), cf * CFrame.new(0, 8.5, 0), col, M.CorrodedMetal)
+			else
+				mk(m, "Container", Vector3.new(8, 8.5, 24), cf * CFrame.new(0, 4.25, 0), col, M.CorrodedMetal)
+			end
+			for k = -5, 5 do
+				for _, s in ipairs({ -1, 1 }) do
+					mk(m, "Rib", Vector3.new(0.2, 8, 0.4), cf * CFrame.new(s * 4.2, 4.25, k * 2.1), col:Lerp(BLACK, 0.25), M.Metal, FLAT)
+				end
+			end
+			reserve(def, cx, cz, 13)
+		end
+		container(-60, -50, true, Color3.fromRGB(150, 44, 32), false)
+		container(-40, 10, false, Color3.fromRGB(40, 100, 60), true)
+		container(40, -45, false, Color3.fromRGB(190, 100, 30), true)
+		container(62, 12, true, Color3.fromRGB(40, 70, 130), false)
+		container(-78, 62, true, Color3.fromRGB(110, 110, 116), false)
+		crate(m, o + Vector3.new(-60, 0, -42.5), 4, 0)
+		crate(m, o + Vector3.new(-64, 0, -42), 3.5, 0.4)
+		crate(m, o + Vector3.new(-64, 4, -42), 3.5, 0.1)
+
+		-- клетки с бочками под красным светом (как на референсе)
+		local function cage(cx, cz)
+			local x1, x2, z1, z2 = cx - 6, cx + 6, cz - 4, cz + 4
+			for _, c in ipairs({ { x1, z1 }, { x2, z1 }, { x1, z2 }, { x2, z2 } }) do
+				B("CagePost", c[1] - 0.3, c[1] + 0.3, 0, 7, c[2] - 0.3, c[2] + 0.3, REDL:Lerp(BLACK, 0.5), M.Metal)
+			end
+			for _, w in ipairs({ { x1, x2, z1, z1 + 0.15 }, { x1, x2, z2 - 0.15, z2 }, { x1, x1 + 0.15, z1, z2 }, { x2 - 0.15, x2, z1, z2 } }) do
+				B("CageMesh", w[1], w[2], 0, 7, w[3], w[4], Color3.fromRGB(110, 30, 30), M.Metal, { Transparency = 0.55 })
+			end
+			for i = 0, 2 do
+				for j = 0, 1 do barrel(m, o + Vector3.new(cx - 3.5 + i * 3.5, 0, cz - 1.6 + j * 3.2)) end
+			end
+			local glow = B("CageGlow", x1, x2, 0, 0.2, z1 - 0.4, z1 - 0.2, REDL, M.Neon, FLAT)
+			pointLight(glow, REDL, 18, 1.4)
+			reserve(def, cx, cz, 8)
+		end
+		cage(-95, 25)
+		cage(60, -85)
+
+		-- генераторная (две двери — петля), Палач появляется здесь
+		room(m, o, 70, 118, -20, 50, 12, Color3.fromRGB(50, 46, 46), M.DiamondPlate,
+			{ W = { { c = -5, w = 7 }, { c = 35, w = 7 } } }, { lampColor = REDL, lampBrightness = 0.8 })
+		for _, g in ipairs({ { 92, 0 }, { 102, 34 } }) do
+			B("Generator", g[1] - 6, g[1] + 6, 0, 7, g[2] - 8, g[2] + 8, Color3.fromRGB(70, 74, 60), M.Metal)
+			cyl(m, "GenTank", 4, 5, o + Vector3.new(g[1], 9, g[2] - 3), Color3.fromRGB(90, 90, 80), M.Metal)
+			cyl(m, "GenPipe", 6, 1.4, o + Vector3.new(g[1] + 3, 10, g[2] + 4), Color3.fromRGB(80, 60, 40), M.Metal)
+			local beacon = ball(m, "Beacon", 1, o + Vector3.new(g[1], 7.6, g[2] + 6), REDL, M.Neon, NOCOL)
+			pointLight(beacon, REDL, 16, 1.6)
+			tag(beacon, "P2D_Blink", { Rate = 1.6 })
+		end
+		for _, p in ipairs({ { 80, 15 }, { 80, 25 }, { 80, 5 } }) do addSpawn(def, "Killer", p[1], p[2]) end
+		reserve(def, 94, 15, 30)
+
+		-- серверная (ряды стоек — короткие петли)
+		room(m, o, -118, -74, -70, -10, 11, Color3.fromRGB(40, 44, 56), M.SmoothPlastic,
+			{ E = { { c = -55, w = 7 }, { c = -25, w = 7 } } }, { lampColor = Color3.fromRGB(120, 160, 255), lampBrightness = 0.6 })
+		for _, x in ipairs({ -110, -100, -90 }) do
+			for _, z in ipairs({ { -64, -46 }, { -38, -16 } }) do
+				B("Rack", x - 1.2, x + 1.2, 0, 9, z[1], z[2], Color3.fromRGB(24, 26, 30), M.Metal)
+				for k = 0, 5 do
+					local led = B("Led", x + 1.2, x + 1.35, 2 + k * 1.2, 2.3 + k * 1.2, z[1] + 1 + k * 2.5, z[1] + 1.6 + k * 2.5,
+						k % 2 == 0 and Color3.fromRGB(80, 255, 120) or Color3.fromRGB(255, 80, 60), M.Neon, FLAT)
+					if k % 3 == 0 then tag(led, "P2D_Blink", { Rate = 1 + k * 0.4 }) end
+				end
+			end
+		end
+		reserve(def, -96, -40, 30)
+
+		-- погрузочная рампа на юге со сквозным прицепом
+		B("Dock", -100, 50, 0, 4, 100, 120, Color3.fromRGB(80, 80, 84), M.Concrete)
+		for k = 0, 37 do
+			B("DockEdge", -100 + k * 4, -98 + k * 4, 4, 4.05, 100, 100.8, k % 2 == 0 and YEL or BLACK, M.SmoothPlastic, FLAT)
+		end
+		ramp(m, o + Vector3.new(-90, 0, 94), 8, 4, 12, Vector3.new(0, 0, 1), Color3.fromRGB(80, 80, 84), M.Concrete)
+		ramp(m, o + Vector3.new(40, 0, 94), 8, 4, 12, Vector3.new(0, 0, 1), Color3.fromRGB(80, 80, 84), M.Concrete)
+		local trailer = CFrame.new(o + Vector3.new(-30, 4, 110)) * CFrame.Angles(0, math.rad(90), 0)
+		for _, s in ipairs({ -1, 1 }) do
+			mk(m, "TrailerSide", Vector3.new(0.4, 9, 26), trailer * CFrame.new(s * 4.5, 4.5, 0), Color3.fromRGB(200, 200, 205), M.Metal)
+		end
+		mk(m, "TrailerTop", Vector3.new(9.4, 0.4, 26), trailer * CFrame.new(0, 9, 0), Color3.fromRGB(200, 200, 205), M.Metal)
+		reserve(def, -25, 110, 24)
+
+		-- конвейер, паллеты, штабеля ящиков
+		B("Conveyor", -70, -10, 0, 2.6, 72, 76, Color3.fromRGB(50, 52, 58), M.Metal)
+		for x = -68, -12, 3 do
+			mk(m, "Roller", Vector3.new(4, 0.6, 0.6), CFrame.new(o + Vector3.new(x, 2.7, 74)) * ALONG_Z, Color3.fromRGB(130, 130, 136), M.Metal, { Shape = CYL })
+		end
+		reserve(def, -40, 74, 8)
+		for _, p in ipairs({ { 20, -20 }, { -20, -78 }, { 78, 82 }, { -98, 92 }, { 95, -100 }, { -20, 30 } }) do
+			pallet(m, o + Vector3.new(p[1], 0, p[2]), r:NextNumber(0, 3))
+			crate(m, o + Vector3.new(p[1], 0.85, p[2]), r:NextNumber(3, 4), r:NextNumber(0, 1))
+			reserve(def, p[1], p[2], 4)
+		end
+		for _, p in ipairs({ { 25, 85 }, { -60, 30 }, { 80, -40 } }) do
+			crate(m, o + Vector3.new(p[1], 0, p[2]), 4.5, 0)
+			crate(m, o + Vector3.new(p[1] + 4.6, 0, p[2]), 4.5, 0)
+			crate(m, o + Vector3.new(p[1] + 2.3, 4.5, p[2]), 4.5, 0.2)
+			reserve(def, p[1] + 2, p[2], 6)
+		end
+
+		-- освещение: подвесные лампы, аварийные огни, прожекторы
+		for _, x in ipairs({ -80, -20, 40, 90 }) do
+			for _, z in ipairs({ -70, -20, 30, 80 }) do
+				beam(m, "LampCable", o + Vector3.new(x, H - 2, z), o + Vector3.new(x, 23, z), 0.12, BLACK, M.Metal, NOCOL)
+				mk(m, "LampShade", Vector3.new(3, 1, 3), o + Vector3.new(x, 22.5, z), Color3.fromRGB(40, 42, 46), M.Metal, NOCOL)
+				local bulb = mk(m, "LampBulb", Vector3.new(2, 0.2, 2), o + Vector3.new(x, 21.9, z), Color3.fromRGB(255, 240, 210), M.Neon, NOCOL)
+				spotLight(bulb, Enum.NormalId.Bottom, Color3.fromRGB(255, 230, 200), 40, 80, 1.3)
+				if (x + z) % 3 == 0 then tag(bulb, "P2D_Flicker") end
+			end
+		end
+		for _, p in ipairs({ { -119.5, -40 }, { -119.5, 20 }, { 119.5, 60 }, { 119.5, 100 }, { 0, -119.5 }, { -60, 119.5 } }) do
+			local strobe = mk(m, "Strobe", Vector3.new(1, 1, 1), o + Vector3.new(p[1], 14, p[2]), REDL, M.Neon, NOCOL)
+			pointLight(strobe, REDL, 26, 1.5)
+			tag(strobe, "P2D_Blink", { Rate = 1.1 })
+		end
+		floodlight(m, o + Vector3.new(-20, 0, -60), o + Vector3.new(-40, 0, -40))
+		floodlight(m, o + Vector3.new(45, 0, 70), o + Vector3.new(30, 0, 50))
+		floodlight(m, o + Vector3.new(-100, 0, 5), o + Vector3.new(-95, 0, 25), Color3.fromRGB(255, 200, 200))
+		return def
+	end
+
+	--------------------------------------------------------------------
+	-- ФЕРМА на закате: амбар с сеновалом, дом, силос, мельница, кукурузное поле
+	--------------------------------------------------------------------
+	local function buildFarm(o)
+		local def = newMap(MAP_INFO[3], o, 116)
+		local m = def.model
+		local r = Random.new(33)
+		local function B(...) return box(m, o, ...) end
+		local AUTUMN = { Color3.fromRGB(110, 70, 30), Color3.fromRGB(90, 80, 36), Color3.fromRGB(130, 60, 26), Color3.fromRGB(70, 66, 34) }
+		local WOOD = Color3.fromRGB(110, 78, 50)
+		local exits = {
+			{ x = -10, z = 112, normal = Vector3.new(0, 0, -1), label = "ГЛАВНЫЕ ВОРОТА", w = 14 },
+			{ x = -112, z = -25, normal = Vector3.new(1, 0, 0), label = "ВОРОТА ПАСТБИЩА", w = 12 },
+			{ x = 60, z = -112, normal = Vector3.new(0, 0, 1), label = "КАЛИТКА ЗА СИЛОСОМ", w = 10 },
+		}
+		terra("FillBlock", CFrame.new(o + Vector3.new(0, -10, 0)), Vector3.new(600, 20, 600), M.LeafyGrass)
+		local ringExits = {}
+		for _, e in ipairs(exits) do
+			table.insert(ringExits, { pos = Vector3.new(e.x, 0, e.z) - e.normal * 6, normal = e.normal })
+		end
+		hillRing(o, 160, { M.Sandstone, M.LeafyGrass }, r, ringExits, 22)
+		terra("FillBall", o + Vector3.new(-30, -22, -70), 28, M.LeafyGrass)
+		reserve(def, -30, -70, 20)
+		local function path(a, b, w)
+			local mid = (a + b) / 2
+			terra("FillBlock", CFrame.lookAt(o + Vector3.new(mid.X, -1.5, mid.Z), o + Vector3.new(b.X, -1.5, b.Z)), Vector3.new(w or 9, 3, (b - a).Magnitude), M.Ground)
+		end
+		path(Vector3.new(-10, 0, 120), Vector3.new(-10, 0, 40))
+		path(Vector3.new(-10, 0, 40), Vector3.new(30, 0, 20))
+		path(Vector3.new(30, 0, -45), Vector3.new(60, 0, -116))
+		path(Vector3.new(-55, 0, 8), Vector3.new(-116, 0, -25))
+
+		-- забор по периметру с проёмами под ворота
+		local function fenceLine(a, b, gaps)
+			local dir = (b - a).Unit
+			local len = (b - a).Magnitude
+			local cur = 0
+			table.sort(gaps, function(x, y) return x.t < y.t end)
+			local segs = {}
+			for _, g in ipairs(gaps) do
+				table.insert(segs, { cur, g.t - g.w / 2 - 1 })
+				cur = g.t + g.w / 2 + 1
+			end
+			table.insert(segs, { cur, len })
+			for _, sgm in ipairs(segs) do
+				local s0, s1 = sgm[1], sgm[2]
+				if s1 - s0 > 0.5 then
+					local p0, p1 = o + a + dir * s0, o + a + dir * s1
+					local cf = CFrame.lookAt((p0 + p1) / 2, p1)
+					mk(m, "FenceBoards", Vector3.new(0.4, 7, s1 - s0), cf + Vector3.new(0, 3.5, 0), Color3.fromRGB(96, 70, 46), M.WoodPlanks)
+					mk(m, "FenceRail", Vector3.new(0.6, 0.6, s1 - s0), cf + Vector3.new(0, 6.6, 0), Color3.fromRGB(70, 50, 32), M.Wood)
+					for k = 0, math.floor((s1 - s0) / 8) do
+						mk(m, "FencePost", Vector3.new(0.9, 8, 0.9), p0 + dir * math.min(k * 8, s1 - s0) + Vector3.new(0, 4, 0), Color3.fromRGB(70, 50, 32), M.Wood)
 					end
 				end
 			end
 		end
-	end
-	side(true, 1)
-	side(true, -1)
-	side(false, 1)
-	side(false, -1)
-	mk(m, "GrassTop", Vector3.new(w + 0.8, 1.2, d + 0.8), o + Vector3.new(cx, y0 + h + 0.3, cz), GRASS_TOP, M.Grass)
-	mk(m, "GrassLip", Vector3.new(w + 1.2, 0.6, d + 1.2), o + Vector3.new(cx, y0 + h - 0.5, cz), GRASS_DARK, M.Grass, FLAT)
-	return y0 + h + 0.9
-end
-
--- мёртвая петля: кольцо в вертикальной плоскости, низ открыт — можно пробежать насквозь
-local function loopArch(def, cx, cz, R, alongX)
-	local N = 30
-	local segLen = 2 * math.pi * R / N * 1.08
-	local base = CFrame.new(def.origin + Vector3.new(cx, R + 0.6, cz)) * (alongX and CFrame.identity or ALONG_Z)
-	for i = 0, N - 1 do
-		local th = (i + 0.5) / N * 2 * math.pi
-		local deg = math.deg(th)
-		if not (deg > 245 and deg < 295) then
-			local cf = base * CFrame.new(R * math.cos(th), R * math.sin(th), 0) * CFrame.Angles(0, 0, th + math.pi / 2)
-			mk(def.model, "Loop", Vector3.new(segLen, 1.6, 7), cf, i % 2 == 0 and CHK_A or CHK_B, M.SmoothPlastic)
-			mk(def.model, "LoopTrack", Vector3.new(segLen, 0.3, 7.4), cf * CFrame.new(0, 0.9, 0), Color3.fromRGB(58, 58, 70), M.Metal, FLAT)
+		fenceLine(Vector3.new(-118, 0, -118), Vector3.new(118, 0, -118), { { t = 178, w = 10 } })
+		fenceLine(Vector3.new(-118, 0, 118), Vector3.new(118, 0, 118), { { t = 108, w = 14 } })
+		fenceLine(Vector3.new(-118, 0, -118), Vector3.new(-118, 0, 118), { { t = 93, w = 12 } })
+		fenceLine(Vector3.new(118, 0, -118), Vector3.new(118, 0, 118), {})
+		for _, e in ipairs(exits) do
+			addEscape(def, e.x, e.z, e.label, e.normal, function(gm, g)
+				if e.w >= 14 then
+					-- арка над главными воротами
+					for _, s in ipairs({ -1, 1 }) do
+						mk(gm, "ArchPost", Vector3.new(1.2, 13, 1.2), g * CFrame.new(s * (e.w / 2 + 1.2), 6.5, 0), Color3.fromRGB(70, 50, 32), M.Wood)
+					end
+					local sign = mk(gm, "ArchSign", Vector3.new(e.w + 4, 2.4, 0.4), g * CFrame.new(0, 12, 0), Color3.fromRGB(120, 86, 56), M.WoodPlanks)
+					surfaceText(sign, Enum.NormalId.Front, "ФЕРМА «ТИХИЙ ЛУГ»", { color = Color3.fromRGB(240, 220, 180) })
+				end
+				local doors = swingGate(e.w, 7, "wood")(gm, g)
+				doors.lampY = e.w >= 14 and 14 or 9
+				return doors
+			end)
 		end
-	end
-	reserve(def, cx, cz, R + 4)
-end
 
-local function palm(def, x, z, r)
-	local pos = def.origin + Vector3.new(x, 0, z)
-	local leanX, leanZ = r:NextNumber(-0.22, 0.22), r:NextNumber(-0.22, 0.22)
-	local segs = r:NextInteger(6, 8)
-	local p = pos
-	for i = 1, segs do
-		local nxt = p + Vector3.new(leanX * 2.6, 2.6, leanZ * 2.6)
-		local d = 2.1 - i * 0.09
-		local cf = CFrame.new((p + nxt) / 2) * CFrame.Angles(leanZ, 0, -leanX)
-		cyl(def.model, "Trunk", 2.9, d, cf, i % 2 == 0 and Color3.fromRGB(104, 74, 46) or Color3.fromRGB(78, 54, 34), M.Wood)
-		p = nxt
-	end
-	for k = 0, 6 do
-		local yaw = k / 7 * math.pi * 2 + r:NextNumber(-0.2, 0.2)
-		local cf = CFrame.new(p) * CFrame.Angles(0, yaw, 0) * CFrame.Angles(math.rad(-r:NextNumber(25, 50)), 0, 0) * CFrame.new(0, 0, -4)
-		mk(def.model, "Frond", Vector3.new(1.8, 0.25, 8.5), cf, Color3.fromRGB(96, 92, 40):Lerp(Color3.fromRGB(60, 40, 20), r:NextNumber()), M.Grass, NOCOL)
-	end
-	ball(def.model, "Coconut", 1.3, p + Vector3.new(0.6, -0.8, 0.4), Color3.fromRGB(60, 36, 20), M.Wood, NOCOL)
-end
+		-- амбар: сквозной (двери с двух торцов и по бокам), сеновал с пандусом и лестницей
+		do
+			local x1, x2, z1, z2 = 10, 50, -45, 15
+			local RED = Color3.fromRGB(130, 40, 30)
+			room(m, o, x1, x2, z1, z2, 18, RED, M.WoodPlanks, {
+				N = { { c = 30, w = 12, h = 14 } }, S = { { c = 30, w = 12, h = 14 } },
+				W = { { c = -5, w = 6 } }, E = { { c = -20, w = 6 } },
+			}, { noRoof = true, lamp = false })
+			gableRoof(m, o + Vector3.new(30, 18, -15), 42, 62, 10, Color3.fromRGB(60, 44, 36), M.WoodPlanks)
+			B("BarnFloor", x1, x2, 0, 0.3, z1, z2, Color3.fromRGB(110, 90, 60), M.WoodPlanks)
+			for _, z in ipairs({ z1 - 0.9, z2 + 0.9 }) do
+				for _, x in ipairs({ 19, 41 }) do
+					B("BarnDoor", x - 4, x + 4, 0, 14, z - 0.3, z + 0.3, Color3.fromRGB(150, 50, 36), M.WoodPlanks)
+				end
+				B("DoorTrim", 23.5, 36.5, 14, 14.6, z - 0.4, z + 0.4, Color3.fromRGB(230, 220, 200), M.Wood)
+			end
+			B("Loft", x1 + 1, x2 - 1, 9, 10, z1 + 1, -18, Color3.fromRGB(120, 92, 60), M.WoodPlanks)
+			railing(m, o + Vector3.new(x1 + 1, 10, -18), o + Vector3.new(38, 10, -18), 3, Color3.fromRGB(80, 60, 40))
+			ramp(m, o + Vector3.new(44, 0, -7), 6, 10, 22, Vector3.new(0, 0, -1), Color3.fromRGB(120, 92, 60), M.WoodPlanks)
+			ladder(m, o + Vector3.new(13, 0, -16.5), 10)
+			for _, p in ipairs({ { 16, -30 }, { 16, -26 }, { 20, -30 } }) do
+				B("Bale", p[1] - 2, p[1] + 2, 0, 2.6, p[2] - 1.3, p[2] + 1.3, Color3.fromRGB(210, 180, 90), M.Grass)
+			end
+			B("Bale", 15, 19, 2.6, 5.2, -31, -28.4, Color3.fromRGB(210, 180, 90), M.Grass)
+			for _, x in ipairs({ 18, 26 }) do B("Stall", x - 0.25, x + 0.25, 0, 5, 0, 13, Color3.fromRGB(100, 76, 50), M.Wood) end
+			for _, p in ipairs({ { 30, -32 }, { 30, 2 } }) do
+				local lantern = B("Lantern", p[1] - 0.5, p[1] + 0.5, 16, 17, p[2] - 0.5, p[2] + 0.5, Color3.fromRGB(255, 190, 100), M.Neon, NOCOL)
+				pointLight(lantern, Color3.fromRGB(255, 170, 80), 26, 1.2)
+				tag(lantern, "P2D_Flicker")
+			end
+			for _, y in ipairs({ 13, 15 }) do
+				B("Hayloft", 26, 34, y, y + 2, z1 - 0.95, z1 - 0.85, Color3.fromRGB(30, 22, 20), M.WoodPlanks, NOCOL)
+			end
+			reserve(def, 30, -15, 36)
+		end
 
-local function totem(def, x, z)
-	local o = def.origin
-	for i = 0, 2 do
-		local c = o + Vector3.new(x, 1.7 + i * 3.4, z)
-		mk(def.model, "Totem", Vector3.new(3.4, 3.4, 3.4), c, i % 2 == 0 and Color3.fromRGB(120, 70, 40) or Color3.fromRGB(160, 100, 50), M.Wood)
-		for _, s in ipairs({ -1, 1 }) do
-			for _, fz in ipairs({ -1, 1 }) do
-				mk(def.model, "TotemEye", Vector3.new(0.6, 0.6, 0.1), c + Vector3.new(s * 0.7, 0.5, fz * 1.72), Color3.fromRGB(255, 40, 30), M.Neon, NOCOL)
+		-- трактор и пикап у амбара (большие укрытия)
+		do
+			local t = CFrame.new(o + Vector3.new(8, 0, 34)) * CFrame.Angles(0, math.rad(-20), 0)
+			mk(m, "TractorBody", Vector3.new(4, 4, 9), t * CFrame.new(0, 3.5, 0), Color3.fromRGB(170, 40, 30), M.Metal)
+			mk(m, "TractorHood", Vector3.new(3.2, 2.4, 4), t * CFrame.new(0, 5.6, -2), Color3.fromRGB(170, 40, 30), M.Metal)
+			mk(m, "Exhaust", Vector3.new(0.4, 3, 0.4), t * CFrame.new(1, 7.5, -2.5), Color3.fromRGB(40, 40, 40), M.Metal)
+			for _, w in ipairs({ { -2.8, 2.5, 6 }, { 2.8, 2.5, 6 }, { -2.2, -3, 3.2 }, { 2.2, -3, 3.2 } }) do
+				mk(m, "TractorWheel", Vector3.new(1.4, w[3], w[3]), t * CFrame.new(w[1], w[3] / 2, w[2]), Color3.fromRGB(24, 22, 20), M.SmoothPlastic, { Shape = CYL })
+			end
+			reserve(def, 8, 34, 7)
+			car(m, CFrame.new(o + Vector3.new(-20, 0, -45)) * CFrame.Angles(0, math.rad(70), 0), Color3.fromRGB(90, 110, 120))
+			reserve(def, -20, -45, 9)
+		end
+
+		-- жилой дом с крыльцом (два входа + боковой)
+		do
+			local x1, x2, z1, z2 = -71, -39, 8, 32
+			room(m, o, x1, x2, z1, z2, 11, Color3.fromRGB(176, 160, 130), M.WoodPlanks, {
+				S = { { c = -55, w = 6 } }, N = { { c = -62, w = 6 } }, E = { { c = 20, w = 5 } },
+			}, { noRoof = true, lampColor = Color3.fromRGB(255, 180, 110), flicker = true })
+			B("HouseCeiling", x1, x2, 11, 11.5, z1, z2, Color3.fromRGB(120, 100, 80), M.WoodPlanks)
+			gableRoof(m, o + Vector3.new(-55, 11.5, 20), 34, 26, 7, Color3.fromRGB(70, 46, 40), M.WoodPlanks, true)
+			B("HouseFloor", x1, x2, 0, 0.3, z1, z2, Color3.fromRGB(100, 72, 48), M.WoodPlanks)
+			wallWithGaps(m, o + Vector3.new(-55, 0, z1), o + Vector3.new(-55, 0, z2), 11, 0.8, Color3.fromRGB(150, 130, 100), M.WoodPlanks, { { t = 12, w = 5, h = 8 } })
+			B("Porch", x1, x2, 0, 1, z2, z2 + 6, Color3.fromRGB(110, 80, 52), M.WoodPlanks)
+			B("PorchRoof", x1, x2, 8, 8.5, z2, z2 + 7, Color3.fromRGB(70, 46, 40), M.WoodPlanks)
+			for _, x in ipairs({ x1 + 1, -55 - 4, -55 + 4, x2 - 1 }) do B("PorchPost", x - 0.4, x + 0.4, 1, 8, z2 + 5.6, z2 + 6.4, Color3.fromRGB(200, 190, 170), M.Wood) end
+			local pl = B("PorchLamp", -52, -51, 6.5, 7.5, z2 + 0.2, z2 + 0.8, Color3.fromRGB(255, 200, 120), M.Neon, NOCOL)
+			pointLight(pl, Color3.fromRGB(255, 180, 100), 24, 1.4)
+			for _, w in ipairs({ { -66, z2 + 0.85 }, { -45, z2 + 0.85 }, { -66, z1 - 0.85 }, { -45, z1 - 0.85 } }) do
+				B("Window", w[1] - 2, w[1] + 2, 4, 7, w[2] - 0.1, w[2] + 0.1, Color3.fromRGB(255, 190, 110), M.Neon, { Transparency = 0.25, CanCollide = false })
+			end
+			B("Table", -67, -61, 0, 3, 14, 18, Color3.fromRGB(100, 70, 46), M.Wood)
+			B("Bed", -51, -42, 0, 2.5, 10, 16, Color3.fromRGB(150, 60, 50), M.Fabric)
+			local tv = B("TV", -44, -40.5, 0, 4, 26, 30, Color3.fromRGB(40, 38, 42), M.SmoothPlastic)
+			local scr = mk(m, "TVScreen", Vector3.new(0.1, 2.4, 2.8), tv.Position + Vector3.new(-1.8, 0.4, 0), Color3.fromRGB(150, 170, 200), M.Neon, NOCOL)
+			tag(scr, "P2D_Flicker", { Strong = true })
+			reserve(def, -55, 22, 22)
+		end
+		for _, p in ipairs({ { -20, 52 }, { -55, 48 }, { -35, 56 }, { -75, 46 }, { -5, 62 } }) do addSpawn(def, "Survivor", p[1], p[2]) end
+
+		-- силос с лестницей и площадкой
+		do
+			local c = o + Vector3.new(80, 0, -60)
+			cyl(m, "Silo", 34, 14, c + Vector3.new(0, 17, 0), Color3.fromRGB(150, 150, 156), M.CorrodedMetal)
+			ball(m, "SiloDome", 14, c + Vector3.new(0, 34, 0), Color3.fromRGB(120, 120, 126), M.Metal)
+			ladder(m, c + Vector3.new(0, 0, 8), 16)
+			mk(m, "SiloLedge", Vector3.new(6, 0.6, 4), c + Vector3.new(0, 16, 9.2), Color3.fromRGB(90, 90, 96), M.DiamondPlate)
+			railing(m, c + Vector3.new(-3, 16.3, 11), c + Vector3.new(3, 16.3, 11), 3, Color3.fromRGB(90, 90, 96))
+			reserve(def, 80, -60, 11)
+		end
+		for _, p in ipairs({ { 70, -88 }, { 98, -40 }, { 100, -86 } }) do addSpawn(def, "Killer", p[1], p[2]) end
+
+		-- мельница (лопасти вращаются на клиенте)
+		do
+			local c = o + Vector3.new(-80, 0, -65)
+			for _, s in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
+				beam(m, "MillLeg", c + Vector3.new(s[1] * 4, 0, s[2] * 4), c + Vector3.new(s[1] * 1.2, 22, s[2] * 1.2), 0.5, Color3.fromRGB(80, 80, 84), M.Metal)
+			end
+			mk(m, "MillDeck", Vector3.new(4, 0.5, 4), c + Vector3.new(0, 22, 0), Color3.fromRGB(80, 80, 84), M.Metal)
+			local hub = c + Vector3.new(0, 24, -2.4)
+			local blades = Instance.new("Model")
+			blades.Name = "MillBlades"
+			blades.Parent = m
+			for i = 0, 7 do
+				mk(blades, "Blade", Vector3.new(1.2, 7, 0.2), CFrame.new(hub) * CFrame.Angles(0, 0, i / 8 * math.pi * 2) * CFrame.new(0, 4, 0), Color3.fromRGB(170, 170, 176), M.Metal, NOCOL)
+			end
+			blades.WorldPivot = CFrame.new(hub)
+			tag(blades, "P2D_SpinModel", { Speed = 0.7, Axis = "Z" })
+			mk(m, "MillTail", Vector3.new(0.3, 3, 6), c + Vector3.new(0, 24, 3.5), Color3.fromRGB(150, 40, 30), M.Metal)
+			B("Trough", -74, -64, 0, 2, -58, -55, Color3.fromRGB(110, 110, 116), M.Metal)
+			reserve(def, -80, -65, 8)
+		end
+
+		-- кукурузное поле: ряды-стены с поперечными проходами (лабиринт), пугало
+		do
+			for x = 34, 98, 5 do
+				for _, seg in ipairs({ { 46, 58 }, { 63, 82 }, { 87, 104 } }) do
+					if not (x > 58 and x < 72 and seg[1] == 63) then
+						B("Corn", x - 1.3, x + 1.3, 0, 9.5, seg[1], seg[2], Color3.fromRGB(150, 138, 64), M.Grass)
+						B("CornTop", x - 1.6, x + 1.6, 9.5, 10.5, seg[1], seg[2], Color3.fromRGB(190, 160, 70), M.Grass, NOCOL)
+					end
+				end
+			end
+			local s = o + Vector3.new(65, 0, 72)
+			mk(m, "ScarecrowPost", Vector3.new(0.5, 9, 0.5), s + Vector3.new(0, 4.5, 0), Color3.fromRGB(80, 60, 40), M.Wood)
+			mk(m, "ScarecrowArms", Vector3.new(7, 0.4, 0.4), s + Vector3.new(0, 6.5, 0), Color3.fromRGB(80, 60, 40), M.Wood)
+			mk(m, "ScarecrowShirt", Vector3.new(3, 3, 1.2), s + Vector3.new(0, 6, 0), Color3.fromRGB(110, 60, 50), M.Fabric)
+			mk(m, "ScarecrowHead", Vector3.new(2, 2, 2), s + Vector3.new(0, 8.6, 0), Color3.fromRGB(170, 140, 90), M.Fabric)
+			cyl(m, "ScarecrowHat", 0.6, 3.2, s + Vector3.new(0, 9.8, 0), Color3.fromRGB(60, 50, 36), M.Fabric)
+			for _, x in ipairs({ -0.45, 0.45 }) do
+				mk(m, "ScarecrowEye", Vector3.new(0.4, 0.4, 0.1), s + Vector3.new(x, 8.8, -1.05), Color3.fromRGB(255, 60, 30), M.Neon, NOCOL)
+			end
+			for x = 34, 98, 5 do reserve(def, x, 75, 4) end
+			reserve(def, 66, 50, 6)
+			reserve(def, 66, 100, 6)
+		end
+
+		-- загоны с курятником, тюки сена
+		do
+			local x1, x2, z1, z2 = -105, -62, 58, 100
+			local function rail(a, b)
+				local cf = CFrame.lookAt(o + (a + b) / 2, o + b)
+				local len = (b - a).Magnitude
+				for _, y in ipairs({ 1.6, 3.4 }) do
+					mk(m, "PenRail", Vector3.new(0.3, 0.4, len), cf + Vector3.new(0, y, 0), WOOD, M.Wood)
+				end
+				for k = 0, math.floor(len / 6) do
+					mk(m, "PenPost", Vector3.new(0.6, 4.4, 0.6), o + a + (b - a).Unit * math.min(k * 6, len) + Vector3.new(0, 2.2, 0), Color3.fromRGB(80, 58, 36), M.Wood)
+				end
+			end
+			rail(Vector3.new(x1, 0, z1), Vector3.new(-90, 0, z1))
+			rail(Vector3.new(-80, 0, z1), Vector3.new(x2, 0, z1))
+			rail(Vector3.new(x2, 0, z1), Vector3.new(x2, 0, 74))
+			rail(Vector3.new(x2, 0, 84), Vector3.new(x2, 0, z2))
+			rail(Vector3.new(x1, 0, z2), Vector3.new(x2, 0, z2))
+			rail(Vector3.new(x1, 0, z1), Vector3.new(x1, 0, z2))
+			for _, p in ipairs({ { -92, 72 }, { -84, 72 }, { -92, 88 }, { -84, 88 } }) do
+				B("Stilt", p[1] - 0.3, p[1] + 0.3, 0, 4, p[2] - 0.3, p[2] + 0.3, Color3.fromRGB(80, 58, 36), M.Wood)
+			end
+			B("Coop", -93, -83, 4, 9, 71, 89, Color3.fromRGB(150, 120, 80), M.WoodPlanks)
+			gableRoof(m, o + Vector3.new(-88, 9, 80), 11, 19, 3, Color3.fromRGB(80, 50, 40), M.WoodPlanks)
+			ramp(m, o + Vector3.new(-88, 0, 64), 3, 4, 7, Vector3.new(0, 0, 1), WOOD, M.WoodPlanks)
+			reserve(def, -84, 79, 22)
+		end
+		local function roundBale(x, z, yaw)
+			mk(m, "RoundBale", Vector3.new(4.6, 5.6, 5.6), CFrame.new(o + Vector3.new(x, 2.8, z)) * CFrame.Angles(0, yaw, 0), Color3.fromRGB(200, 170, 80), M.Grass, { Shape = CYL })
+			reserve(def, x, z, 4)
+		end
+		for _, b in ipairs({ { -15, 0, 0.2 }, { -10, 5, 1.4 }, { 60, 30, 0.8 }, { 64, 36, 2 }, { -40, -20, 1 }, { 95, 20, 0.3 }, { -95, 20, 1.7 }, { 30, 60, 0.6 } }) do
+			roundBale(b[1], b[2], b[3])
+		end
+		B("YardPole", 55, 56, 0, 14, 22, 23, Color3.fromRGB(70, 56, 40), M.Wood)
+		local yardLamp = B("YardLamp", 54, 57, 13.5, 14.2, 21, 24, Color3.fromRGB(255, 200, 120), M.Neon, NOCOL)
+		pointLight(yardLamp, Color3.fromRGB(255, 180, 100), 40, 1.6)
+
+		-- деревья: внутри — немного, по холмам-краю — плотная стена
+		scatter(def, r, 14, 106, 6, function(x, z)
+			leafTree(m, o + Vector3.new(x, 0, z), r:NextNumber(20, 30), r, AUTUMN)
+			reserve(def, x, z, 3)
+		end)
+		for _ = 1, 90 do
+			local side = r:NextInteger(1, 4)
+			local t = r:NextNumber(-200, 200)
+			local d = r:NextNumber(124, 205)
+			local x, z
+			if side == 1 then x, z = t, -d elseif side == 2 then x, z = t, d elseif side == 3 then x, z = -d, t else x, z = d, t end
+			local nearExit = false
+			for _, e in ipairs(exits) do
+				if (Vector3.new(x, 0, z) - Vector3.new(e.x, 0, e.z) + e.normal * 40).Magnitude < 40 then nearExit = true end
+			end
+			if not nearExit then
+				local p = o + Vector3.new(x, 0, z)
+				local y = groundY(p + Vector3.new(0, 40, 0)) - 1
+				if r:NextNumber() < 0.7 then
+					leafTree(m, Vector3.new(p.X, y, p.Z), r:NextNumber(30, 44), r, AUTUMN)
+				else
+					pine(m, Vector3.new(p.X, y, p.Z), r:NextNumber(34, 48), r, 2)
+				end
 			end
 		end
-		for _, fz in ipairs({ -1, 1 }) do
-			mk(def.model, "TotemMouth", Vector3.new(1.6, 0.3, 0.1), c + Vector3.new(0, -0.6, fz * 1.72), BLACK, M.SmoothPlastic, NOCOL)
-		end
-	end
-	for _, s in ipairs({ -1, 1 }) do
-		mk(def.model, "TotemWing", Vector3.new(2.4, 1.2, 0.4), o + Vector3.new(x + s * 2.8, 8.6, z), Color3.fromRGB(200, 60, 40), M.Wood)
-	end
-end
-
--- гигантское кольцо в воздухе (крутится на клиенте)
-local function goldRing(def, x, z, y, R)
-	local mdl = Instance.new("Model")
-	mdl.Name = "GiantRing"
-	mdl.Parent = def.model
-	local c = def.origin + Vector3.new(x, y, z)
-	local N = 16
-	for i = 0, N - 1 do
-		local th = (i + 0.5) / N * 2 * math.pi
-		local cf = CFrame.new(c) * CFrame.new(R * math.cos(th), R * math.sin(th), 0) * CFrame.Angles(0, 0, th + math.pi / 2)
-		mk(mdl, "Ring", Vector3.new(2 * math.pi * R / N * 1.1, 0.9, 0.9), cf, GOLD, M.Neon, NOCOL)
-	end
-	for i = 1, 3 do
-		mk(mdl, "Drip", Vector3.new(0.25, 1 + i * 0.8, 0.25), c + Vector3.new(-1.2 + i * 0.7, -R - 0.6 - i * 0.4, 0), BLOOD, M.Neon, NOCOL)
-	end
-	mdl.WorldPivot = CFrame.new(c)
-	tag(mdl, "P2D_SpinModel", { Speed = 0.8 })
-	pointLight(mdl:FindFirstChildWhichIsA("BasePart"), GOLD, 18, 1)
-end
-
-local function checkpoint(def, x, z)
-	local base = def.origin + Vector3.new(x, 0, z)
-	cyl(def.model, "Checkpoint", 9, 0.7, base + Vector3.new(0, 4.5, 0), Color3.fromRGB(60, 70, 110), M.Metal)
-	local bulb = ball(def.model, "CheckpointBall", 1.8, base + Vector3.new(0, 9.6, 0), Color3.fromRGB(255, 50, 50), M.Neon, NOCOL)
-	pointLight(bulb, Color3.fromRGB(255, 70, 60), 34, 1.6)
-	tag(bulb, "P2D_Blink", { Rate = 1.2 })
-	reserve(def, x, z, 3)
-end
-
-local function goalSign(m, pos)
-	cyl(m, "GoalPost", 13, 0.8, pos + Vector3.new(-9, 6.5, 0), Color3.fromRGB(150, 150, 160), M.Metal)
-	local sign = mk(m, "GoalSign", Vector3.new(6.5, 6.5, 0.5), pos + Vector3.new(-9, 15.5, 0), Color3.fromRGB(245, 205, 60), M.SmoothPlastic)
-	surfaceText(sign, Enum.NormalId.Front, "GOAL", { font = Enum.Font.Arcade, color = Color3.fromRGB(150, 20, 20) })
-	surfaceText(sign, Enum.NormalId.Back, "P2D", { font = Enum.Font.Arcade, color = Color3.fromRGB(150, 20, 20) })
-	tag(sign, "P2D_Spin", { Speed = 2.5 })
-end
-
-local function buildHills(origin)
-	local def = newMap(MAP_INFO[1], origin, 260, Color3.fromRGB(58, 92, 42), M.Grass)
-	local r = Random.new(11)
-	for _, p in ipairs({ { -100, -100 }, { -112, -76 }, { -78, -112 }, { -96, -56 }, { -56, -102 } }) do
-		addSpawn(def, "Survivor", p[1], p[2])
-	end
-	for _, p in ipairs({ { 96, 96 }, { 108, 72 }, { 72, 108 } }) do
-		addSpawn(def, "Killer", p[1], p[2])
-	end
-	addEscape(def, 112, -112, "ФИНИШ · АКТ 1", goalSign)
-	addEscape(def, -112, 112, "ФИНИШ · СЕКРЕТ", goalSign)
-	addEscape(def, 4, 118, "ФИНИШ · АКТ 2", goalSign)
-
-	-- плато {x, z, w, d, h, сторона пандуса}
-	local plats = {
-		{ -40, -30, 40, 28, 8, "S" },
-		{ 44, 20, 36, 30, 8, "W" },
-		{ -72, 46, 30, 24, 4, "E" },
-		{ 62, -62, 34, 26, 4, "N" },
-		{ 0, -86, 28, 20, 8, "N" },
-		{ -12, 74, 30, 22, 8, "S" },
-	}
-	for _, pl in ipairs(plats) do
-		local x, z, w, d, h, side = pl[1], pl[2], pl[3], pl[4], pl[5], pl[6]
-		local top = checkerBlock(def, x, z, w, d, h)
-		local len = top * 2.3
-		if side == "S" then
-			ramp(def, x, z + d / 2 + len / 2, 10, top, len, Vector3.new(0, 0, -1), GRASS_TOP, M.Grass)
-		elseif side == "N" then
-			ramp(def, x, z - d / 2 - len / 2, 10, top, len, Vector3.new(0, 0, 1), GRASS_TOP, M.Grass)
-		elseif side == "E" then
-			ramp(def, x + w / 2 + len / 2, z, 10, top, len, Vector3.new(-1, 0, 0), GRASS_TOP, M.Grass)
-		else
-			ramp(def, x - w / 2 - len / 2, z, 10, top, len, Vector3.new(1, 0, 0), GRASS_TOP, M.Grass)
-		end
-		reserve(def, x, z, math.max(w, d) / 2 + 6)
-		addTokenSpot(def, x + w * 0.25, z, top)
-	end
-	local top2 = checkerBlock(def, 48, 24, 16, 14, 4, 8.9) -- второй ярус
-	addTokenSpot(def, 48, 24, top2)
-
-	loopArch(def, 0, 0, 14, true)
-	loopArch(def, -100, 8, 12, false)
-	goldRing(def, 30, -30, 13, 4)
-	goldRing(def, -60, -70, 11, 3.5)
-	goldRing(def, 90, -10, 12, 4)
-	for _, p in ipairs({ { -20, -62 }, { 22, 52 }, { -86, -24 }, { 84, -22 }, { 30, 96 }, { -40, 100 } }) do
-		checkpoint(def, p[1], p[2])
+		return def
 	end
 
-	-- табличка у старта
-	local post = def.origin + Vector3.new(-80, 0, -80)
-	mk(def.model, "SignPost", Vector3.new(0.6, 6, 0.6), post + Vector3.new(0, 3, 0), Color3.fromRGB(90, 60, 36), M.Wood)
-	local board = mk(def.model, "SignBoard", Vector3.new(7, 3, 0.4), CFrame.new(post + Vector3.new(0, 6.5, 0)) * CFrame.Angles(0, math.rad(45), 0),
-		Color3.fromRGB(120, 84, 50), M.Wood)
-	surfaceText(board, Enum.NormalId.Front, "НЕ ОГЛЯДЫВАЙСЯ", { color = Color3.fromRGB(150, 15, 15) })
-	surfaceText(board, Enum.NormalId.Back, "ТЫ УЖЕ ПРОИГРАЛ", { color = Color3.fromRGB(150, 15, 15) })
-	reserve(def, -80, -80, 4)
-
-	scatter(def, r, 6, 120, 6, function(x, z)
-		totem(def, x, z)
-		reserve(def, x, z, 4)
-	end)
-	scatterTokenSpots(def, r, 22, 118)
-	scatter(def, r, 34, 122, 5, function(x, z) palm(def, x, z, r) end)
-	scatter(def, r, 22, 122, 3, function(x, z)
-		local s = r:NextNumber(3, 7)
-		mk(def.model, "Rock", Vector3.new(s, s * 0.7, s * 1.2),
-			CFrame.new(def.origin + Vector3.new(x, s * 0.2, z)) * CFrame.Angles(r:NextNumber(0, 3), r:NextNumber(0, 6), 0),
-			Color3.fromRGB(110, 96, 86), M.Slate)
-	end)
-	return def
+	MAPS.Forest = buildForest(Vector3.new(2000, 0, 0))
+	MAPS.Complex = buildComplex(Vector3.new(4000, 0, 0))
+	MAPS.Farm = buildFarm(Vector3.new(6000, 0, 0))
 end
 
 ------------------------------------------------------------------------
--- КАРТРИДЖ 2: АРКАДА «ПОЛНОЧЬ» (зал игровых автоматов)
+-- ЛОББИ: заброшенный автокинотеатр в ночном лесу (экран показывает статус)
 ------------------------------------------------------------------------
-local NEON_SET = {
-	Color3.fromRGB(255, 60, 200), Color3.fromRGB(60, 230, 255), Color3.fromRGB(255, 220, 60),
-	Color3.fromRGB(90, 255, 120), Color3.fromRGB(170, 90, 255), Color3.fromRGB(255, 130, 40),
-}
-local SCREEN_TEXT = { "INSERT COIN", "GAME OVER", "PRESS 2 DIE", "1UP", "HI SCORE", "CONTINUE?", "HELP ME", "NO EXIT", "P2D", "YOU DIED", "PLAYER 2?", "DON'T" }
-
-local function arcadeCabinet(def, cf, col, text)
-	local m = def.model
-	mk(m, "Cabinet", Vector3.new(3, 6.6, 2.8), cf * CFrame.new(0, 3.3, 0), Color3.fromRGB(22, 20, 26), M.SmoothPlastic)
-	mk(m, "SideArt", Vector3.new(0.12, 5.6, 2.4), cf * CFrame.new(-1.56, 3.4, 0), col, M.SmoothPlastic, FLAT)
-	mk(m, "SideArt", Vector3.new(0.12, 5.6, 2.4), cf * CFrame.new(1.56, 3.4, 0), col, M.SmoothPlastic, FLAT)
-	mk(m, "Marquee", Vector3.new(2.8, 0.8, 0.3), cf * CFrame.new(0, 6.2, -1.5), col, M.Neon, FLAT)
-	local screen = mk(m, "Screen", Vector3.new(2.3, 1.9, 0.15), cf * CFrame.new(0, 4.7, -1.42) * CFrame.Angles(math.rad(-12), 0, 0),
-		col:Lerp(BLACK, 0.75), M.Neon, FLAT)
-	surfaceText(screen, Enum.NormalId.Front, text, { font = Enum.Font.Arcade, color = col:Lerp(Color3.new(1, 1, 1), 0.5), pps = 60 })
-	tag(screen, "P2D_Flicker")
-	mk(m, "Panel", Vector3.new(3, 0.5, 1.3), cf * CFrame.new(0, 3.3, -1.9) * CFrame.Angles(math.rad(10), 0, 0), Color3.fromRGB(40, 38, 44), M.SmoothPlastic)
-	ball(m, "Button", 0.42, (cf * CFrame.new(0.5, 3.62, -1.95)).Position, Color3.fromRGB(255, 50, 50), M.Neon, FLAT)
-	ball(m, "Button", 0.42, (cf * CFrame.new(0.95, 3.62, -1.85)).Position, Color3.fromRGB(60, 140, 255), M.Neon, FLAT)
-	cyl(m, "Stick", 0.7, 0.14, cf * CFrame.new(-0.6, 3.85, -1.9), Color3.fromRGB(30, 30, 30), M.Metal, FLAT)
-end
-
-local function clawMachine(def, x, z, r)
-	local o = def.origin + Vector3.new(x, 0, z)
-	local m = def.model
-	mk(m, "ClawBase", Vector3.new(5, 3, 5), o + Vector3.new(0, 1.5, 0), Color3.fromRGB(200, 40, 140), M.SmoothPlastic)
-	mk(m, "ClawGlass", Vector3.new(4.6, 5.6, 4.6), o + Vector3.new(0, 5.8, 0), Color3.fromRGB(180, 220, 255), M.Glass, { Transparency = 0.75 })
-	mk(m, "ClawTop", Vector3.new(5, 1, 5), o + Vector3.new(0, 9.1, 0), Color3.fromRGB(200, 40, 140), M.SmoothPlastic)
-	for _, s in ipairs({ { -2.4, -2.4 }, { 2.4, -2.4 }, { -2.4, 2.4 }, { 2.4, 2.4 } }) do
-		mk(m, "ClawPost", Vector3.new(0.3, 5.6, 0.3), o + Vector3.new(s[1], 5.8, s[2]), NEON_SET[1], M.Neon, FLAT)
-	end
-	for _ = 1, 6 do
-		ball(m, "Plush", r:NextNumber(0.9, 1.4), o + Vector3.new(r:NextNumber(-1.6, 1.6), 3.7, r:NextNumber(-1.6, 1.6)),
-			NEON_SET[r:NextInteger(1, #NEON_SET)]:Lerp(Color3.new(1, 1, 1), 0.3), M.Fabric, FLAT)
-	end
-	cyl(m, "ClawWire", 2.2, 0.1, o + Vector3.new(0.6, 7.4, 0.3), Color3.fromRGB(180, 180, 190), M.Metal, FLAT)
-	ball(m, "Claw", 0.6, o + Vector3.new(0.6, 6.2, 0.3), Color3.fromRGB(200, 200, 210), M.Metal, FLAT)
-	reserve(def, x, z, 5)
-end
-
-local function buildArcade(origin)
-	local def = newMap(MAP_INFO[2], origin, 260, Color3.fromRGB(26, 20, 40), M.Fabric)
-	def.beamH = 21
-	local r = Random.new(42)
-	local o = origin
-	local m = def.model
-	local H = 22
-
-	-- ковёр с «конфетти»
-	for _ = 1, 170 do
-		local x, z = r:NextNumber(-126, 126), r:NextNumber(-126, 126)
-		local s = r:NextNumber(0.8, 2.2)
-		mk(m, "Confetti", Vector3.new(s, 0.06, s * r:NextNumber(0.3, 1)),
-			CFrame.new(o + Vector3.new(x, 0.03, z)) * CFrame.Angles(0, r:NextNumber(0, 6.28), 0),
-			NEON_SET[r:NextInteger(1, #NEON_SET)]:Lerp(BLACK, 0.35), M.SmoothPlastic, FLAT)
-	end
-	-- стены здания, плинтус-неон и потолок
-	local wallC = Color3.fromRGB(36, 28, 52)
-	for _, s in ipairs({ -1, 1 }) do
-		mk(m, "OuterWall", Vector3.new(264, H, 2), o + Vector3.new(0, H / 2, s * 131), wallC, M.SmoothPlastic)
-		mk(m, "OuterWall", Vector3.new(2, H, 264), o + Vector3.new(s * 131, H / 2, 0), wallC, M.SmoothPlastic)
-		mk(m, "WallNeon", Vector3.new(262, 0.4, 0.3), o + Vector3.new(0, 2, s * 129.9), NEON_SET[1], M.Neon, FLAT)
-		mk(m, "WallNeon", Vector3.new(0.3, 0.4, 262), o + Vector3.new(s * 129.9, 2, 0), NEON_SET[2], M.Neon, FLAT)
-	end
-	mk(m, "Ceiling", Vector3.new(264, 1, 264), o + Vector3.new(0, H + 0.5, 0), Color3.fromRGB(14, 10, 20), M.SmoothPlastic)
-	for i, z in ipairs({ -72, -36, 0, 36, 72 }) do
-		local strip = mk(m, "CeilingNeon", Vector3.new(130, 0.4, 0.8), o + Vector3.new(-6, H - 0.2, z), NEON_SET[i % 2 == 0 and 1 or 2], M.Neon, FLAT)
-		local sl = Instance.new("SurfaceLight")
-		sl.Face = Enum.NormalId.Bottom
-		sl.Range = 18
-		sl.Brightness = 1.3
-		sl.Angle = 120
-		sl.Color = strip.Color
-		sl.Parent = strip
-		tag(strip, "P2D_Flicker")
-	end
-
-	addEscape(def, 0, -122, "ГЛАВНЫЙ ВХОД", exitDoorStyle(Vector3.new(0, 0, 1)))
-	addEscape(def, -122, 110, "ЗАПАСНОЙ ВЫХОД", exitDoorStyle(Vector3.new(1, 0, 0)))
-	addEscape(def, 122, 30, "ЧЁРНЫЙ ХОД", exitDoorStyle(Vector3.new(-1, 0, 0)))
-
-	for _, p in ipairs({ { -100, -112 }, { -80, -116 }, { -60, -112 }, { -40, -116 }, { -112, -94 } }) do
-		addSpawn(def, "Survivor", p[1], p[2])
-	end
-	for _, p in ipairs({ { 100, -96 }, { 104, -30 }, { 100, 78 } }) do
-		addSpawn(def, "Killer", p[1], p[2])
-	end
-
-	-- ряды автоматов спиной к спине; проходы между группами
-	local n = 0
-	for _, rz in ipairs({ -54, -18, 18, 54 }) do
-		for _, gx in ipairs({ -66, -36, -6, 24 }) do
-			for g = 0, 2 do
-				local cx = gx + g * 3.2
-				n += 1
-				local col = NEON_SET[(n % #NEON_SET) + 1]
-				arcadeCabinet(def, CFrame.new(o + Vector3.new(cx, 0, rz - 1.5)), col, SCREEN_TEXT[(n % #SCREEN_TEXT) + 1])
-				arcadeCabinet(def, CFrame.new(o + Vector3.new(cx, 0, rz + 1.5)) * CFrame.Angles(0, math.pi, 0),
-					NEON_SET[((n + 3) % #NEON_SET) + 1], SCREEN_TEXT[((n + 5) % #SCREEN_TEXT) + 1])
-			end
-			reserve(def, gx + 3.2, rz, 9)
-		end
-	end
-
-	-- автоматы с игрушками вдоль западной стены
-	for _, z in ipairs({ -70, -40, -10, 20 }) do
-		clawMachine(def, -108, z, r)
-	end
-	-- танцевальный автомат
-	do
-		local c = o + Vector3.new(-100, 0, 60)
-		mk(m, "DancePad", Vector3.new(10, 0.6, 10), c + Vector3.new(0, 0.3, 0), Color3.fromRGB(30, 30, 36), M.SmoothPlastic)
-		for i, d in ipairs({ { -2.6, 0 }, { 2.6, 0 }, { 0, -2.6 }, { 0, 2.6 } }) do
-			local a = mk(m, "Arrow", Vector3.new(2.2, 0.15, 2.2), c + Vector3.new(d[1], 0.65, d[2]), NEON_SET[i], M.Neon, FLAT)
-			tag(a, "P2D_Blink", { Rate = 2 + i * 0.3 })
-		end
-		mk(m, "DanceScreen", Vector3.new(10, 9, 2), c + Vector3.new(0, 4.5, 6), Color3.fromRGB(22, 20, 26), M.SmoothPlastic)
-		local s = mk(m, "DanceDisplay", Vector3.new(8, 4.5, 0.2), c + Vector3.new(0, 6, 4.9), Color3.fromRGB(40, 20, 60), M.Neon, FLAT)
-		surfaceText(s, Enum.NormalId.Front, "DANCE\nOR DIE", { font = Enum.Font.Arcade, color = NEON_SET[1] })
-		reserve(def, -100, 60, 9)
-	end
-	-- аэрохоккей
-	for _, z in ipairs({ 92, 112 }) do
-		local c = o + Vector3.new(-96, 0, z)
-		mk(m, "Hockey", Vector3.new(12, 3, 6), c + Vector3.new(0, 1.5, 0), Color3.fromRGB(230, 230, 240), M.SmoothPlastic)
-		mk(m, "HockeyRim", Vector3.new(12.4, 0.4, 6.4), c + Vector3.new(0, 3.1, 0), NEON_SET[2], M.Neon, FLAT)
-		reserve(def, -96, z, 7)
-	end
-
-	-- стойка призов на севере
-	mk(m, "Counter", Vector3.new(60, 3.6, 4), o + Vector3.new(-10, 1.8, 100), Color3.fromRGB(70, 30, 90), M.SmoothPlastic)
-	mk(m, "CounterGlass", Vector3.new(60, 0.3, 4), o + Vector3.new(-10, 3.75, 100), Color3.fromRGB(180, 220, 255), M.Glass, { Transparency = 0.5 })
-	mk(m, "PrizeWall", Vector3.new(60, 14, 2), o + Vector3.new(-10, 7, 124), Color3.fromRGB(46, 22, 60), M.SmoothPlastic)
-	for row = 0, 2 do
-		mk(m, "Shelf", Vector3.new(60, 0.5, 3), o + Vector3.new(-10, 3 + row * 4, 121.8), Color3.fromRGB(120, 90, 60), M.Wood)
-		for k = 0, 11 do
-			ball(m, "Plush", r:NextNumber(1.4, 2.2), o + Vector3.new(-37 + k * 5 + r:NextNumber(-1, 1), 4.3 + row * 4, 121.6),
-				NEON_SET[r:NextInteger(1, #NEON_SET)]:Lerp(Color3.new(1, 1, 1), 0.25), M.Fabric, FLAT)
-		end
-	end
-	local prize = mk(m, "PrizeSign", Vector3.new(24, 3, 0.4), o + Vector3.new(-10, 16, 122.6), Color3.fromRGB(40, 10, 50), M.Neon, FLAT)
-	surfaceText(prize, Enum.NormalId.Front, "ПРИЗЫ ДЛЯ ВЫЖИВШИХ", { color = NEON_SET[3] })
-	reserve(def, -10, 100, 8)
-	for x = -38, 18, 14 do reserve(def, x, 100, 6) end
-
-	-- служебные комнаты на востоке
-	room(m, o + Vector3.new(102, 0, -96), 40, 30, 12, Color3.fromRGB(60, 56, 70), M.Concrete, { W = true, N = true }, 9, Color3.fromRGB(190, 220, 255))
-	room(m, o + Vector3.new(104, 0, -30), 36, 50, 12, Color3.fromRGB(70, 60, 50), M.Concrete, { W = true }, 9)
-	room(m, o + Vector3.new(102, 0, 80), 40, 36, 12, Color3.fromRGB(70, 90, 96), M.Concrete, { W = true, S = true }, 9, Color3.fromRGB(200, 255, 230))
-	reserve(def, 102, -96, 24)
-	reserve(def, 104, -30, 30)
-	reserve(def, 102, 80, 26)
-	-- склад: ящики
-	for _ = 1, 8 do
-		local s = r:NextNumber(3.5, 5)
-		mk(m, "Crate", Vector3.new(s, s, s), CFrame.new(o + Vector3.new(r:NextNumber(92, 118), s / 2, r:NextNumber(-50, -10))) * CFrame.Angles(0, r:NextNumber(0, 6), 0),
-			Color3.fromRGB(120, 90, 55), M.Wood)
-	end
-	-- охрана: стол с мониторами
-	mk(m, "Desk", Vector3.new(12, 3, 4), o + Vector3.new(108, 1.5, -104), Color3.fromRGB(60, 50, 40), M.Wood)
-	for i = -1, 1 do
-		mk(m, "SecurityMonitor", Vector3.new(3, 2.4, 2.4), o + Vector3.new(108 + i * 3.6, 4.2, -104.5), Color3.fromRGB(30, 30, 34), M.SmoothPlastic)
-		local scr = mk(m, "SecurityScreen", Vector3.new(2.5, 1.9, 0.1), o + Vector3.new(108 + i * 3.6, 4.2, -103.25), Color3.fromRGB(160, 200, 180), M.Neon, FLAT)
-		tag(scr, "P2D_Flicker", { Strong = true })
-		surfaceText(scr, Enum.NormalId.Back, i == 0 and "REC" or "CAM " .. (i + 2), { font = Enum.Font.Arcade, color = Color3.fromRGB(20, 40, 30), pps = 60 })
-	end
-	-- туалет: кабинки
-	for i = 0, 3 do
-		mk(m, "Stall", Vector3.new(0.4, 7, 7), o + Vector3.new(96 + i * 6, 3.5, 92), Color3.fromRGB(120, 140, 150), M.SmoothPlastic)
-	end
-
-	-- касса у входа
-	room(m, o + Vector3.new(-40, 0, -92), 14, 10, 9, Color3.fromRGB(80, 30, 60), M.SmoothPlastic, { N = true }, 6, NEON_SET[1])
-	reserve(def, -40, -92, 10)
-
-	-- жетоны: проходы, служебки, углы
-	for _, z in ipairs({ -72, -36, 0, 36, 72 }) do
-		for _, x in ipairs({ -50, -20, 10, 40 }) do
-			addTokenSpot(def, x + r:NextNumber(-6, 6), z)
-		end
-	end
-	for _, p in ipairs({ { 96, -88 }, { 110, -18 }, { 96, -42 }, { 90, 76 }, { 112, 86 }, { -88, -58 }, { -88, 34 },
-		{ -20, 86 }, { 30, 88 }, { -86, -104 }, { 60, -104 }, { 70, 110 } }) do
-		addTokenSpot(def, p[1], p[2])
-	end
-	return def
-end
-
-------------------------------------------------------------------------
--- КАРТРИДЖ 3: ЛАБИРИНТ 8-БИТ (стены перестраиваются каждый матч)
-------------------------------------------------------------------------
-local MAZE_N, MAZE_C, MAZE_H = 13, 18, 11
-local MAZE_WALL = Color3.fromRGB(18, 22, 70)
-local MAZE_NEON = Color3.fromRGB(60, 110, 255)
-
-local function mazeCell(i, j)
-	return Vector3.new((i - (MAZE_N + 1) / 2) * MAZE_C, 0, (j - (MAZE_N + 1) / 2) * MAZE_C)
-end
-
-local function genMaze(seed)
-	local r = Random.new(seed)
-	local N = MAZE_N
-	local east, south, seen = {}, {}, {}
-	for i = 1, N do
-		east[i], south[i], seen[i] = {}, {}, {}
-		for j = 1, N do
-			east[i][j] = i < N
-			south[i][j] = j < N
-			seen[i][j] = false
-		end
-	end
-	-- центральная «клетка» 3x3 — логово Палача
-	local c0, c1 = (N + 1) / 2 - 1, (N + 1) / 2 + 1
-	local stack = {}
-	for i = c0, c1 do
-		for j = c0, c1 do
-			seen[i][j] = true
-			if i < c1 then east[i][j] = false end
-			if j < c1 then south[i][j] = false end
-			table.insert(stack, { i, j })
-		end
-	end
-	for k = #stack, 2, -1 do
-		local q = r:NextInteger(1, k)
-		stack[k], stack[q] = stack[q], stack[k]
-	end
-	-- обход в глубину
-	while #stack > 0 do
-		local top = stack[#stack]
-		local i, j = top[1], top[2]
-		local nb = {}
-		if i > 1 and not seen[i - 1][j] then table.insert(nb, { i - 1, j, "W" }) end
-		if i < N and not seen[i + 1][j] then table.insert(nb, { i + 1, j, "E" }) end
-		if j > 1 and not seen[i][j - 1] then table.insert(nb, { i, j - 1, "N" }) end
-		if j < N and not seen[i][j + 1] then table.insert(nb, { i, j + 1, "S" }) end
-		if #nb == 0 then
-			table.remove(stack)
-		else
-			local n = nb[r:NextInteger(1, #nb)]
-			if n[3] == "W" then
-				east[i - 1][j] = false
-			elseif n[3] == "E" then
-				east[i][j] = false
-			elseif n[3] == "N" then
-				south[i][j - 1] = false
-			else
-				south[i][j] = false
-			end
-			seen[n[1]][n[2]] = true
-			table.insert(stack, { n[1], n[2] })
-		end
-	end
-	-- петли для погонь: убираем часть оставшихся стен
-	for i = 1, N do
-		for j = 1, N do
-			if east[i][j] and r:NextNumber() < 0.3 then east[i][j] = false end
-			if south[i][j] and r:NextNumber() < 0.3 then south[i][j] = false end
-		end
-	end
-	return east, south
-end
-
-local function ghostStatue(def, pos, col)
-	local m = def.model
-	cyl(m, "GhostBody", 5, 6, pos + Vector3.new(0, 3.2, 0), col, M.SmoothPlastic)
-	local head = ball(m, "GhostHead", 6, pos + Vector3.new(0, 5.7, 0), col, M.SmoothPlastic)
-	for k = 0, 3 do
-		local a = k / 4 * math.pi * 2 + math.pi / 4
-		ball(m, "GhostSkirt", 1.8, pos + Vector3.new(math.cos(a) * 2.4, 0.7, math.sin(a) * 2.4), col, M.SmoothPlastic)
-	end
-	for _, s in ipairs({ -1, 1 }) do
-		ball(m, "GhostEye", 1.8, pos + Vector3.new(s * 1.1, 6.2, -2.3), Color3.fromRGB(240, 240, 255), M.SmoothPlastic, NOCOL)
-		ball(m, "GhostPupil", 0.9, pos + Vector3.new(s * 1.1, 6.0, -3.1), Color3.fromRGB(30, 50, 200), M.Neon, NOCOL)
-	end
-	pointLight(head, col, 22, 1.6)
-end
-
-local function warpStyle(normal)
-	return function(m, pos)
-		local tangent = Vector3.new(normal.Z, 0, -normal.X)
-		for _, s in ipairs({ -1, 1 }) do
-			mk(m, "WarpPillar", Vector3.new(1.6, 13, 1.6), pos + tangent * (s * 7) + Vector3.new(0, 6.5, 0), GREEN, M.Neon)
-		end
-		local cf = CFrame.lookAt(pos + Vector3.new(0, 13.8, 0), pos + Vector3.new(0, 13.8, 0) + normal)
-		local bar = mk(m, "WarpBar", Vector3.new(15.6, 2.4, 1.6), cf, Color3.fromRGB(10, 40, 20), M.SmoothPlastic)
-		surfaceText(bar, Enum.NormalId.Front, "WARP", { font = Enum.Font.Arcade, color = GREEN })
-	end
-end
-
-local function buildMaze(origin)
-	local def = newMap(MAP_INFO[3], origin, 260, Color3.fromRGB(6, 6, 12), M.SmoothPlastic)
-	local o = origin
-	local m = def.model
-	local half = MAZE_N * MAZE_C / 2
-	local mid = (MAZE_N + 1) / 2
-
-	-- сетка на полу
-	for k = 0, MAZE_N do
-		local v = -half + k * MAZE_C
-		mk(m, "Grid", Vector3.new(0.3, 0.05, 2 * half), o + Vector3.new(v, 0.03, 0), Color3.fromRGB(20, 26, 70), M.Neon, FLAT)
-		mk(m, "Grid", Vector3.new(2 * half, 0.05, 0.3), o + Vector3.new(0, 0.03, v), Color3.fromRGB(20, 26, 70), M.Neon, FLAT)
-	end
-	-- внешний контур с проходами по центру каждой стороны (там «варпы»)
-	local function wallPiece(parent, localPos, alongX)
-		local L = MAZE_C + 2
-		local size = alongX and Vector3.new(L, MAZE_H, 2) or Vector3.new(2, MAZE_H, L)
-		mk(parent, "Wall", size, o + localPos + Vector3.new(0, MAZE_H / 2, 0), MAZE_WALL, M.SmoothPlastic)
-		local cap = alongX and Vector3.new(L, 0.5, 2.3) or Vector3.new(2.3, 0.5, L)
-		mk(parent, "WallCap", cap, o + localPos + Vector3.new(0, MAZE_H + 0.25, 0), MAZE_NEON, M.Neon, FLAT)
-	end
-	for i = 1, MAZE_N do
-		if i ~= mid then
-			local c = mazeCell(i, 1)
-			wallPiece(m, Vector3.new(c.X, 0, -half), true)
-			wallPiece(m, Vector3.new(c.X, 0, half), true)
-			wallPiece(m, Vector3.new(-half, 0, c.X), false)
-			wallPiece(m, Vector3.new(half, 0, c.X), false)
-		end
-	end
-	-- граница внешнего кольца
-	for _, s in ipairs({ -1, 1 }) do
-		mk(m, "RimNeon", Vector3.new(262, 0.4, 0.4), o + Vector3.new(0, 0.2, s * 130), Color3.fromRGB(255, 60, 200), M.Neon, FLAT)
-		mk(m, "RimNeon", Vector3.new(0.4, 0.4, 262), o + Vector3.new(s * 130, 0.2, 0), Color3.fromRGB(255, 60, 200), M.Neon, FLAT)
-	end
-
-	-- логово Палача в центре
-	local c = mazeCell(mid, mid)
-	mk(m, "LairFloor", Vector3.new(MAZE_C * 3 - 2, 0.1, MAZE_C * 3 - 2), o + c + Vector3.new(0, 0.06, 0), Color3.fromRGB(40, 10, 40), M.SmoothPlastic, FLAT)
-	for _, s in ipairs({ { -1, -1 }, { 1, -1 }, { -1, 1 }, { 1, 1 } }) do
-		local p = mk(m, "LairPost", Vector3.new(1.4, 6, 1.4), o + c + Vector3.new(s[1] * 25, 3, s[2] * 25), Color3.fromRGB(255, 80, 200), M.Neon)
-		pointLight(p, Color3.fromRGB(255, 60, 200), 22, 1.2)
-	end
-
-	-- точки и статуи-призраки (ориентиры)
-	local statueCells = { { 3, 3, Color3.fromRGB(255, 40, 40) }, { MAZE_N - 2, 3, Color3.fromRGB(255, 150, 220) },
-		{ 3, MAZE_N - 2, Color3.fromRGB(60, 230, 255) }, { MAZE_N - 2, MAZE_N - 2, Color3.fromRGB(255, 170, 50) } }
-	local skip = {}
-	for _, s in ipairs(statueCells) do
-		ghostStatue(def, o + mazeCell(s[1], s[2]), s[3])
-		skip[s[1] .. ":" .. s[2]] = true
-	end
-	for i = 1, MAZE_N do
-		for j = 1, MAZE_N do
-			local p = mazeCell(i, j)
-			local inLair = math.abs(i - mid) <= 1 and math.abs(j - mid) <= 1
-			local corner = (i == 1 or i == MAZE_N) and (j == 1 or j == MAZE_N)
-			if not skip[i .. ":" .. j] and not inLair then
-				ball(m, "Pellet", 0.8, o + p + Vector3.new(0, 0.7, 0), Color3.fromRGB(255, 230, 200), M.Neon, NOCOL)
-				if not corner then addTokenSpot(def, p.X + 4, p.Z + 4) end
-			end
-		end
-	end
-
-	-- спавны: выжившие по углам, Палач в логове
-	for _, ij in ipairs({ { 1, 1 }, { MAZE_N, 1 }, { 1, MAZE_N }, { MAZE_N, MAZE_N } }) do
-		local p = mazeCell(ij[1], ij[2])
-		addSpawn(def, "Survivor", p.X, p.Z)
-	end
-	for _, d in ipairs({ { 0, 0 }, { -10, 0 }, { 10, 0 } }) do
-		addSpawn(def, "Killer", c.X + d[1], c.Z + d[2])
-	end
-	addEscape(def, 0, -124, "ВАРП · СЕВЕР", warpStyle(Vector3.new(0, 0, 1)))
-	addEscape(def, 0, 124, "ВАРП · ЮГ", warpStyle(Vector3.new(0, 0, -1)))
-	addEscape(def, -124, 0, "ВАРП · ЗАПАД", warpStyle(Vector3.new(1, 0, 0)))
-	addEscape(def, 124, 0, "ВАРП · ВОСТОК", warpStyle(Vector3.new(-1, 0, 0)))
-
-	-- внутренние стены строятся перед каждым матчем
-	local wallsModel = nil
-	def.prepare = function(seed)
-		if wallsModel then wallsModel:Destroy() end
-		wallsModel = Instance.new("Model")
-		wallsModel.Name = "MazeWalls"
-		wallsModel.Parent = m
-		local east, south = genMaze(seed)
-		for i = 1, MAZE_N do
-			for j = 1, MAZE_N do
-				local p = mazeCell(i, j)
-				if east[i][j] then wallPiece(wallsModel, p + Vector3.new(MAZE_C / 2, 0, 0), false) end
-				if south[i][j] then wallPiece(wallsModel, p + Vector3.new(0, 0, MAZE_C / 2), true) end
-			end
-		end
-	end
-	def.prepare(12345)
-	return def
-end
-
-------------------------------------------------------------------------
--- КАРТРИДЖ 4: ДЕТСКАЯ 1996 (выжившие крошечные, мебель гигантская)
-------------------------------------------------------------------------
-local function toyBlock(def, x, z, s, letter, col, yaw)
-	local p = mk(def.model, "ToyBlock", Vector3.new(s, s, s), CFrame.new(def.origin + Vector3.new(x, s / 2, z)) * CFrame.Angles(0, yaw or 0, 0), col, M.Wood)
-	for _, f in ipairs({ Enum.NormalId.Front, Enum.NormalId.Back, Enum.NormalId.Left, Enum.NormalId.Right, Enum.NormalId.Top }) do
-		surfaceText(p, f, letter, { color = Color3.new(1, 1, 1), stroke = 0.4 })
-	end
-	reserve(def, x, z, s * 0.8)
-end
-
-local function bookStack(def, x, z, n, r)
-	local y = 0
-	for i = 1, n do
-		local h = r:NextNumber(3, 4.5)
-		local col = NEON_SET[r:NextInteger(1, #NEON_SET)]:Lerp(BLACK, 0.45)
-		mk(def.model, "Book", Vector3.new(24 - i * 1.5, h, 18 - i),
-			CFrame.new(def.origin + Vector3.new(x, y + h / 2, z)) * CFrame.Angles(0, r:NextNumber(-0.3, 0.3), 0), col, M.SmoothPlastic)
-		y += h
-	end
-	reserve(def, x, z, 14)
-	return y
-end
-
-local function cableLine(def, pts, y, d, col)
-	for i = 1, #pts - 1 do
-		local a = def.origin + Vector3.new(pts[i][1], y, pts[i][2])
-		local b = def.origin + Vector3.new(pts[i + 1][1], y, pts[i + 1][2])
-		local mid = (a + b) / 2
-		local cf = CFrame.lookAt(mid, b) * CFrame.Angles(0, math.rad(90), 0)
-		mk(def.model, "Cable", Vector3.new((b - a).Magnitude + d, d, d), cf, col, M.SmoothPlastic, { Shape = CYL })
-		ball(def.model, "CableJoint", d, b, col, M.SmoothPlastic)
-	end
-end
-
-local function holeStyle(normal, kind)
-	return function(m, pos)
-		local wallC = pos - normal * 7.6
-		local cf = CFrame.lookAt(wallC, wallC + normal)
-		if kind == "door" then
-			local gap = mk(m, "DoorGapLight", Vector3.new(34, 1.4, 0.4), cf * CFrame.new(0, 0.7, 0), Color3.fromRGB(255, 210, 140), M.Neon, NOCOL)
-			local sl = Instance.new("SurfaceLight")
-			sl.Face = Enum.NormalId.Front
-			sl.Range = 30
-			sl.Brightness = 2
-			sl.Color = Color3.fromRGB(255, 200, 130)
-			sl.Parent = gap
-		elseif kind == "hole" then
-			mk(m, "MouseHole", Vector3.new(8, 7, 0.3), cf * CFrame.new(0, 3.5, 0), Color3.fromRGB(4, 3, 3), M.SmoothPlastic, NOCOL)
-			cyl(m, "MouseHoleTop", 0.3, 8, cf * CFrame.new(0, 7, 0) * ALONG_Z * VERT:Inverse(), Color3.fromRGB(4, 3, 3), M.SmoothPlastic, NOCOL)
-		else
-			mk(m, "Vent", Vector3.new(14, 10, 0.3), cf * CFrame.new(0, 6, 0), Color3.fromRGB(150, 150, 160), M.Metal, NOCOL)
-			for k = -2, 2 do
-				mk(m, "VentSlat", Vector3.new(12, 0.6, 0.5), cf * CFrame.new(0, 6 + k * 1.8, -0.2), Color3.fromRGB(30, 30, 34), M.Metal, NOCOL)
-			end
-		end
-	end
-end
-
-local function buildRoom(origin)
-	local def = newMap(MAP_INFO[4], origin, 260, Color3.fromRGB(120, 82, 52), M.WoodPlanks)
-	local r = Random.new(96)
-	local o = origin
-	local m = def.model
-	local WH = 110
-
-	-- обои в полоску, плинтус
-	local wallC = Color3.fromRGB(64, 74, 108)
-	local stripeC = Color3.fromRGB(78, 90, 128)
-	for _, s in ipairs({ -1, 1 }) do
-		mk(m, "Wallpaper", Vector3.new(264, WH, 2), o + Vector3.new(0, WH / 2, s * 131), wallC, M.SmoothPlastic)
-		mk(m, "Wallpaper", Vector3.new(2, WH, 264), o + Vector3.new(s * 131, WH / 2, 0), wallC, M.SmoothPlastic)
-		mk(m, "Baseboard", Vector3.new(262, 4, 0.6), o + Vector3.new(0, 2, s * 129.7), Color3.fromRGB(210, 200, 180), M.Wood)
-		mk(m, "Baseboard", Vector3.new(0.6, 4, 262), o + Vector3.new(s * 129.7, 2, 0), Color3.fromRGB(210, 200, 180), M.Wood)
-		for k = -10, 10 do
-			mk(m, "Stripe", Vector3.new(4, WH - 4, 0.2), o + Vector3.new(k * 12, WH / 2 + 2, s * 129.9), stripeC, M.SmoothPlastic, FLAT)
-			mk(m, "Stripe", Vector3.new(0.2, WH - 4, 4), o + Vector3.new(s * 129.9, WH / 2 + 2, k * 12), stripeC, M.SmoothPlastic, FLAT)
-		end
-	end
-
-	-- ковёр-автотрек
-	mk(m, "Rug", Vector3.new(150, 0.3, 110), o + Vector3.new(0, 0.15, -10), Color3.fromRGB(50, 110, 60), M.Fabric)
-	local roadC = Color3.fromRGB(70, 70, 78)
-	for _, s in ipairs({ -1, 1 }) do
-		mk(m, "Road", Vector3.new(120, 0.1, 10), o + Vector3.new(0, 0.35, -10 + s * 40), roadC, M.Fabric, FLAT)
-		mk(m, "Road", Vector3.new(10, 0.1, 90), o + Vector3.new(s * 55, 0.35, -10), roadC, M.Fabric, FLAT)
-	end
-	mk(m, "Road", Vector3.new(10, 0.1, 80), o + Vector3.new(0, 0.36, -10), roadC, M.Fabric, FLAT)
-	for k = -5, 5 do
-		mk(m, "RoadLine", Vector3.new(4, 0.05, 0.6), o + Vector3.new(k * 10, 0.42, -50), Color3.fromRGB(240, 240, 230), M.SmoothPlastic, FLAT)
-		mk(m, "RoadLine", Vector3.new(4, 0.05, 0.6), o + Vector3.new(k * 10, 0.42, 30), Color3.fromRGB(240, 240, 230), M.SmoothPlastic, FLAT)
-	end
-
-	-- кровать (северо-запад): под ней можно спрятаться
-	local bedC = Color3.fromRGB(110, 70, 50)
-	for _, p in ipairs({ { -125, -125 }, { -62, -125 }, { -125, -31 }, { -62, -31 } }) do
-		boxAt(def, "BedLeg", p[1] - 3, p[1] + 3, 0, 24, p[2] - 3, p[2] + 3, bedC, M.Wood)
-	end
-	boxAt(def, "BedFrame", -128, -58, 20, 24, -128, -28, bedC, M.Wood)
-	boxAt(def, "Mattress", -127, -59, 24, 36, -127, -29, Color3.fromRGB(230, 230, 240), M.Fabric)
-	boxAt(def, "Blanket", -128, -57, 36, 38, -100, -27, Color3.fromRGB(150, 40, 60), M.Fabric)
-	boxAt(def, "BlanketDrape", -57.5, -55.5, 12, 38, -98, -36, Color3.fromRGB(150, 40, 60), M.Fabric)
-	boxAt(def, "Pillow", -122, -66, 36, 44, -124, -106, Color3.fromRGB(240, 240, 250), M.Fabric)
-	boxAt(def, "Headboard", -128, -58, 0, 56, -131, -127, bedC, M.Wood)
-	for _ = 1, 6 do
-		ball(m, "DustBunny", r:NextNumber(2.5, 4.5), o + Vector3.new(r:NextNumber(-118, -70), 1.6, r:NextNumber(-118, -40)), Color3.fromRGB(150, 150, 150), M.Fabric, NOCOL)
-	end
-	reserve(def, -93, -78, 52)
-
-	-- письменный стол (северо-восток)
-	local deskC = Color3.fromRGB(150, 110, 70)
-	for _, p in ipairs({ { 63, -123 }, { 63, -89 } }) do
-		boxAt(def, "DeskLeg", p[1] - 2.5, p[1] + 2.5, 0, 40, p[2] - 2.5, p[2] + 2.5, deskC, M.Wood)
-	end
-	boxAt(def, "Drawers", 104, 126, 0, 40, -126, -86, deskC:Lerp(BLACK, 0.15), M.Wood)
-	boxAt(def, "Desktop", 60, 127, 40, 43, -127, -85, deskC, M.Wood)
-	boxAt(def, "LampBase", 80, 92, 43, 45, -120, -108, Color3.fromRGB(40, 40, 46), M.Metal)
-	boxAt(def, "LampArm", 85, 87, 45, 75, -116, -114, Color3.fromRGB(40, 40, 46), M.Metal)
-	boxAt(def, "LampHead", 80, 92, 72, 78, -116, -102, Color3.fromRGB(40, 40, 46), M.Metal)
-	local bulb = boxAt(def, "LampBulb", 82, 90, 71, 72, -112, -104, Color3.fromRGB(255, 220, 160), M.Neon, NOCOL)
-	local spot = Instance.new("SpotLight")
-	spot.Face = Enum.NormalId.Bottom
-	spot.Range = 60
-	spot.Angle = 70
-	spot.Brightness = 3
-	spot.Color = Color3.fromRGB(255, 210, 150)
-	spot.Parent = bulb
-	-- стул
-	for _, p in ipairs({ { 70, -78 }, { 92, -78 }, { 70, -56 }, { 92, -56 } }) do
-		boxAt(def, "ChairLeg", p[1] - 1.5, p[1] + 1.5, 0, 22, p[2] - 1.5, p[2] + 1.5, Color3.fromRGB(60, 60, 70), M.Metal)
-	end
-	boxAt(def, "ChairSeat", 67, 95, 22, 25, -81, -53, Color3.fromRGB(200, 50, 50), M.SmoothPlastic)
-	boxAt(def, "ChairBack", 67, 95, 25, 55, -55, -52, Color3.fromRGB(200, 50, 50), M.SmoothPlastic)
-	cyl(m, "TrashBin", 18, 16, o + Vector3.new(74, 9, -108), Color3.fromRGB(80, 90, 100), M.Metal)
-	for _ = 1, 5 do
-		ball(m, "PaperBall", r:NextNumber(4, 6), o + Vector3.new(r:NextNumber(50, 100), 2.5, r:NextNumber(-80, -40)), Color3.fromRGB(235, 235, 225), M.Fabric)
-	end
-	-- карандаш
-	cyl(m, "Pencil", 46, 3, CFrame.new(o + Vector3.new(26, 1.5, -100)) * CFrame.Angles(0, math.rad(20), 0) * VERT:Inverse(), Color3.fromRGB(250, 200, 40), M.SmoothPlastic)
-	reserve(def, 92, -105, 26)
-	reserve(def, 81, -66, 16)
-	reserve(def, 26, -100, 24)
-
-	-- тумба с ЭЛТ-телевизором (юг)
-	local standC = Color3.fromRGB(70, 50, 40)
-	boxAt(def, "StandTop", -30, 30, 20, 23, 98, 128, standC, M.Wood)
-	boxAt(def, "StandShelf", -27, 27, 10, 12, 99, 127, standC, M.Wood)
-	for _, x in ipairs({ -30, 27 }) do
-		boxAt(def, "StandSide", x, x + 3, 0, 20, 98, 128, standC, M.Wood)
-	end
-	boxAt(def, "StandBack", -30, 30, 0, 20, 127, 129, standC, M.Wood)
-	for i = 0, 3 do
-		boxAt(def, "ShelfCart", -24 + i * 7, -19 + i * 7, 12, 22, 110, 112, PLASTIC, M.SmoothPlastic)
-	end
-	local tvC = Color3.fromRGB(44, 42, 48)
-	boxAt(def, "TV", -26, 26, 23, 61, 96, 130, tvC, M.SmoothPlastic)
-	local screen = boxAt(def, "TVScreen", -20, 16, 29, 57, 95.4, 96, Color3.fromRGB(100, 120, 160), M.Neon, NOCOL)
-	surfaceText(screen, Enum.NormalId.Front, "PRESS 2 DIE", { font = Enum.Font.Arcade, color = Color3.fromRGB(220, 30, 30) })
-	tag(screen, "P2D_Flicker", { Strong = true })
-	local tvLight = Instance.new("SurfaceLight")
-	tvLight.Face = Enum.NormalId.Front
-	tvLight.Range = 60
-	tvLight.Angle = 100
-	tvLight.Brightness = 2.5
-	tvLight.Color = Color3.fromRGB(150, 180, 255)
-	tvLight.Parent = screen
-	for _, s in ipairs({ -1, 1 }) do
-		mk(m, "Antenna", Vector3.new(0.8, 34, 0.8), CFrame.new(o + Vector3.new(s * 8, 76, 113)) * CFrame.Angles(0, 0, math.rad(-25 * s)), Color3.fromRGB(190, 190, 200), M.Metal)
-	end
-	reserve(def, 0, 112, 32)
-
-	-- сама приставка PRESS2DIE и джойстик
-	boxAt(def, "Console", -17, 17, 0, 8, 66, 90, PLASTIC, M.SmoothPlastic)
-	boxAt(def, "ConsoleSlot", -12, 12, 8, 8.6, 74, 80, PLASTIC_DARK, M.SmoothPlastic)
-	local cart = boxAt(def, "ConsoleCartridge", -11, 11, 8, 26, 75.5, 78.5, Color3.fromRGB(120, 118, 126), M.SmoothPlastic)
-	surfaceText(cart, Enum.NormalId.Front, "PRESS\n2 DIE", { font = Enum.Font.Arcade, color = Color3.fromRGB(200, 20, 20), bg = Color3.fromRGB(20, 18, 22) })
-	local led = boxAt(def, "PowerLED", 10, 13, 3, 5, 65.6, 66.2, Color3.fromRGB(255, 30, 30), M.Neon, NOCOL)
-	pointLight(led, Color3.fromRGB(255, 30, 30), 26, 2)
-	tag(led, "P2D_Blink", { Rate = 0.8 })
-	reserve(def, 0, 78, 20)
-	local pad = def.origin + Vector3.new(-34, 0, 56)
-	mk(m, "Controller", Vector3.new(16, 3, 8), pad + Vector3.new(0, 1.5, 0), Color3.fromRGB(60, 60, 68), M.SmoothPlastic)
-	mk(m, "DPad", Vector3.new(3.6, 0.4, 1.2), pad + Vector3.new(-4.5, 3.2, 0), BLACK, M.SmoothPlastic)
-	mk(m, "DPad", Vector3.new(1.2, 0.4, 3.6), pad + Vector3.new(-4.5, 3.2, 0), BLACK, M.SmoothPlastic)
-	cyl(m, "ButtonA", 0.6, 1.6, pad + Vector3.new(3.5, 3.2, 1), Color3.fromRGB(220, 30, 30), M.SmoothPlastic)
-	cyl(m, "ButtonB", 0.6, 1.6, pad + Vector3.new(5.6, 3.2, -0.6), Color3.fromRGB(240, 200, 40), M.SmoothPlastic)
-	cableLine(def, { { -34, 60 }, { -40, 70 }, { -30, 84 }, { -22, 92 }, { -17, 84 } }, 0.7, 1.4, Color3.fromRGB(30, 30, 34))
-	reserve(def, -34, 56, 10)
-
-	-- книжный шкаф (запад)
-	local shelfC = Color3.fromRGB(120, 86, 56)
-	boxAt(def, "ShelfBack", -130, -128, 0, 96, 0, 90, shelfC, M.Wood)
-	boxAt(def, "ShelfSide", -128, -112, 0, 96, -2, 0, shelfC, M.Wood)
-	boxAt(def, "ShelfSide", -128, -112, 0, 96, 90, 92, shelfC, M.Wood)
-	for k = 1, 4 do
-		local y = k * 24
-		boxAt(def, "ShelfBoard", -128, -112, y - 2, y, 0, 90, shelfC, M.Wood)
-	end
-	for k = 0, 3 do
-		local z = 2
-		while z < 86 do
-			local th = r:NextNumber(3, 5)
-			local bh = r:NextNumber(14, 20)
-			if r:NextNumber() < 0.8 and (k > 0 or z > 40) then
-				boxAt(def, "ShelfBook", -127, -114, k * 24, k * 24 + bh, z, z + th, NEON_SET[r:NextInteger(1, #NEON_SET)]:Lerp(BLACK, 0.4), M.SmoothPlastic)
-			end
-			z += th + r:NextNumber(0.3, 4)
-		end
-	end
-	reserve(def, -120, 45, 20)
-	reserve(def, -120, 70, 20)
-	reserve(def, -120, 20, 20)
-
-	-- игрушки
-	toyBlock(def, -30, -30, 12, "P", Color3.fromRGB(220, 60, 60), 0.3)
-	toyBlock(def, -16, -40, 10, "2", Color3.fromRGB(60, 120, 220), -0.2)
-	toyBlock(def, 40, 10, 12, "D", Color3.fromRGB(60, 180, 90), 0.6)
-	toyBlock(def, 20, -60, 11, "I", Color3.fromRGB(240, 190, 40), 0.1)
-	toyBlock(def, -70, 50, 12, "E", Color3.fromRGB(170, 80, 220), -0.5)
-	toyBlock(def, 90, 40, 10, "!", Color3.fromRGB(240, 120, 40), 0.9)
-	local stackTop = bookStack(def, -50, -4, 4, r)
-	bookStack(def, 70, 70, 3, r)
-	addTokenSpot(def, -50, -4, stackTop)
-	-- машинка
-	do
-		local c = o + Vector3.new(60, 0, 38)
-		mk(m, "ToyCar", Vector3.new(20, 5, 10), c + Vector3.new(0, 4, 0), Color3.fromRGB(210, 30, 30), M.SmoothPlastic)
-		mk(m, "ToyCarCabin", Vector3.new(10, 4, 9), c + Vector3.new(-1, 8.5, 0), Color3.fromRGB(160, 200, 240), M.Glass, { Transparency = 0.3 })
-		for _, w in ipairs({ { -6, -5 }, { 6, -5 }, { -6, 5 }, { 6, 5 } }) do
-			mk(m, "ToyWheel", Vector3.new(2.4, 5, 5), CFrame.new(c + Vector3.new(w[1], 2.5, w[2])) * ALONG_Z, Color3.fromRGB(20, 20, 20), M.SmoothPlastic, { Shape = CYL })
-		end
-		reserve(def, 60, 38, 12)
-	end
-	-- кассеты
-	for _, p in ipairs({ { 30, 60 }, { -90, 10 }, { 100, -10 } }) do
-		local c = o + Vector3.new(p[1], 0, p[2])
-		mk(m, "Cassette", Vector3.new(16, 1.6, 10), CFrame.new(c + Vector3.new(0, 0.8, 0)) * CFrame.Angles(0, r:NextNumber(0, 3), 0), Color3.fromRGB(24, 24, 28), M.SmoothPlastic)
-		reserve(def, p[1], p[2], 9)
-	end
-
-	-- окно с лунным светом (восток), постер, календарь
-	boxAt(def, "WindowFrame", 128.5, 129.5, 46, 94, -32, 32, Color3.fromRGB(230, 230, 230), M.Wood)
-	boxAt(def, "WindowGlass", 128.2, 128.5, 50, 90, -28, 28, Color3.fromRGB(110, 140, 220), M.Neon, NOCOL)
-	boxAt(def, "WindowCross", 127.9, 128.2, 50, 90, -1, 1, Color3.fromRGB(230, 230, 230), M.Wood, NOCOL)
-	boxAt(def, "WindowCross", 127.9, 128.2, 69, 71, -28, 28, Color3.fromRGB(230, 230, 230), M.Wood, NOCOL)
-	for _, s in ipairs({ -1, 1 }) do
-		boxAt(def, "Curtain", 126, 128, 40, 100, s * 34 - 6, s * 34 + 6, Color3.fromRGB(40, 50, 100), M.Fabric, NOCOL)
-	end
-	local moonPart = mk(m, "MoonLight", Vector3.new(1, 1, 1), CFrame.lookAt(o + Vector3.new(126, 80, 0), o + Vector3.new(40, 0, 0)),
-		BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
-	local moon = Instance.new("SpotLight")
-	moon.Face = Enum.NormalId.Front
-	moon.Range = 60
-	moon.Angle = 50
-	moon.Brightness = 4
-	moon.Color = Color3.fromRGB(150, 170, 255)
-	moon.Parent = moonPart
-	local poster = boxAt(def, "Poster", -40, 20, 40, 84, -129.6, -129.2, Color3.fromRGB(20, 12, 16), M.SmoothPlastic, NOCOL)
-	surfaceText(poster, Enum.NormalId.Back, "PRESS 2 DIE\nТЕПЕРЬ\nНА 16 БИТ!", { color = Color3.fromRGB(230, 40, 40) })
-	local cal = boxAt(def, "Calendar", -129.6, -129.2, 50, 70, -80, -64, Color3.fromRGB(240, 240, 230), M.SmoothPlastic, NOCOL)
-	surfaceText(cal, Enum.NormalId.Right, "ОКТЯБРЬ\n1996", { color = Color3.fromRGB(30, 30, 30) })
-
-	-- дверь (восток)
-	boxAt(def, "Door", 129, 129.6, 2, 84, 70, 106, Color3.fromRGB(150, 110, 70), M.Wood, NOCOL)
-	ball(m, "DoorKnob", 3, o + Vector3.new(128, 40, 102), GOLD, M.Metal, NOCOL)
-
-	-- спавны и выходы
-	for _, p in ipairs({ { 0, 54 }, { -20, 50 }, { 20, 50 }, { -42, 40 }, { 38, 54 } }) do
-		addSpawn(def, "Survivor", p[1], p[2])
-	end
-	for _, p in ipairs({ { -92, -60 }, { -104, -84 }, { -80, -100 } }) do
-		addSpawn(def, "Killer", p[1], p[2])
-	end
-	addEscape(def, 122, 88, "ЩЕЛЬ ПОД ДВЕРЬЮ", holeStyle(Vector3.new(-1, 0, 0), "door"))
-	addEscape(def, -20, -122, "МЫШИНАЯ НОРА", holeStyle(Vector3.new(0, 0, 1), "hole"))
-	addEscape(def, -122, 112, "ВЕНТИЛЯЦИЯ", holeStyle(Vector3.new(1, 0, 0), "vent"))
-
-	scatterTokenSpots(def, r, 26, 118)
-	for _, p in ipairs({ { 84, -100 }, { 96, -112 }, { -16, 106 }, { 14, 106 }, { -96, -70 } }) do
-		addTokenSpot(def, p[1], p[2])
-	end
-	return def
-end
-
-------------------------------------------------------------------------
--- ЛОББИ: внутри приставки (материнская плата)
-------------------------------------------------------------------------
-local lobbyPads = {}
 do
+	local P = CONFIG.LOBBY_POS
 	local model = Instance.new("Model")
 	model.Name = "Lobby"
 	model.ModelStreamingMode = Enum.ModelStreamingMode.Persistent
 	model.Parent = Workspace
-	local P = CONFIG.LOBBY_POS
-	local half, H = 80, 56
 	local r = Random.new(7)
-	local PCB = Color3.fromRGB(14, 58, 38)
-	local TRACE = Color3.fromRGB(176, 140, 60)
-	local TRACE_NEON = Color3.fromRGB(80, 255, 150)
-	local SHELL = Color3.fromRGB(40, 40, 46)
-	local function L(x, y, z) return P + Vector3.new(x, y, z) end
+	local function B(...) return box(model, P, ...) end
 
-	mk(model, "Floor", Vector3.new(half * 2 + 4, 2, half * 2 + 4), L(0, -1, 0), PCB, M.SmoothPlastic)
-	-- дорожки платы
-	local dirs = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }
-	for _ = 1, 42 do
-		local x, z = r:NextInteger(-18, 18) * 4, r:NextInteger(-18, 18) * 4
-		local d = dirs[r:NextInteger(1, 4)]
-		local neon = r:NextNumber() < 0.3
-		for _ = 1, r:NextInteger(2, 4) do
-			local len = r:NextInteger(3, 8) * 4
-			local x2 = math.clamp(x + d[1] * len, -76, 76)
-			local z2 = math.clamp(z + d[2] * len, -76, 76)
-			local L2 = math.abs(x2 - x) + math.abs(z2 - z)
-			if L2 > 0.5 then
-				local size = d[1] ~= 0 and Vector3.new(L2 + 0.6, 0.16, 0.6) or Vector3.new(0.6, 0.16, L2 + 0.6)
-				local tr = mk(model, "Trace", size, L((x + x2) / 2, 0.08, (z + z2) / 2), neon and TRACE_NEON or TRACE, neon and M.Neon or M.Metal, FLAT)
-				if neon then tag(tr, "P2D_Pulse") end
-			end
-			x, z = x2, z2
-			if d[1] ~= 0 then
-				d = r:NextNumber() < 0.5 and dirs[3] or dirs[4]
-			else
-				d = r:NextNumber() < 0.5 and dirs[1] or dirs[2]
-			end
-		end
-		cyl(model, "Via", 0.2, 1.4, L(x, 0.1, z), TRACE, M.Metal, FLAT)
-	end
+	terra("FillBlock", CFrame.new(P + Vector3.new(0, -10, 0)), Vector3.new(520, 20, 520), M.Grass)
+	terra("FillBlock", CFrame.new(P + Vector3.new(0, -1.5, 18)), Vector3.new(120, 3, 96), M.Asphalt)
+	hillRing(P, 130, { M.Rock, M.Grass }, r, {}, 0)
 
-	-- корпус приставки: стены с вентиляционными прорезями и потолок
+	-- экран
 	for _, s in ipairs({ -1, 1 }) do
-		mk(model, "Shell", Vector3.new(half * 2 + 4, H, 2), L(0, H / 2, s * (half + 1)), SHELL, M.SmoothPlastic)
-		mk(model, "Shell", Vector3.new(2, H, half * 2 + 4), L(s * (half + 1), H / 2, 0), SHELL, M.SmoothPlastic)
+		B("ScreenPost", s * 33 - 1.2, s * 33 + 1.2, 0, 42, -42, -39.6, Color3.fromRGB(60, 60, 64), M.Metal)
+		for y = 8, 40, 8 do
+			beam(model, "ScreenBrace", P + Vector3.new(s * 33, y - 8, -40.8), P + Vector3.new(s * 25, y, -40.8), 0.5, Color3.fromRGB(60, 60, 64), M.Metal)
+		end
 	end
-	mk(model, "Ceiling", Vector3.new(half * 2 + 4, 2, half * 2 + 4), L(0, H + 1, 0), Color3.fromRGB(28, 28, 32), M.SmoothPlastic)
-	for k = -7, 7 do
-		local slot = mk(model, "VentSlot", Vector3.new(1.2, 16, 0.3), L(k * 9, 38, half - 0.2), Color3.fromRGB(150, 20, 24), M.Neon, FLAT)
-		if k % 3 == 0 then pointLight(slot, Color3.fromRGB(255, 40, 40), 14, 0.6) end
+	B("ScreenFrame", -33, 33, 6, 42, -42.2, -41.2, Color3.fromRGB(30, 30, 32), M.Metal)
+	local screen = B("LobbyScreen", -31, 31, 8, 40, -41.2, -40.8, Color3.fromRGB(16, 16, 18), M.SmoothPlastic)
+	screen:SetAttribute("Face", "Back")
+	local glow = B("ScreenGlow", -1, 1, 22, 23, -36, -35, BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
+	pointLight(glow, Color3.fromRGB(160, 180, 255), 40, 0.7)
+
+	-- машины зрителей и столбики с динамиками
+	local carColors = { Color3.fromRGB(120, 30, 30), Color3.fromRGB(40, 70, 110), Color3.fromRGB(150, 140, 120), Color3.fromRGB(40, 80, 50) }
+	for i, x in ipairs({ -34, -12, 12, 34 }) do
+		car(model, CFrame.new(P + Vector3.new(x, 0, 14 + (i % 2) * 6)) * CFrame.Angles(0, r:NextNumber(-0.15, 0.15), 0), carColors[i])
+	end
+	for _, z in ipairs({ 4, 30 }) do
+		for x = -45, 45, 18 do
+			B("SpeakerPole", x - 0.2, x + 0.2, 0, 4, z - 0.2, z + 0.2, Color3.fromRGB(70, 70, 70), M.Metal)
+			B("Speaker", x - 0.8, x + 0.8, 4, 5.2, z - 0.5, z + 0.5, Color3.fromRGB(40, 40, 44), M.Metal)
+		end
 	end
 
-	-- центральный процессор = точка появления
-	local cpu = mk(model, "CPU", Vector3.new(28, 3, 28), L(0, 1.5, 0), Color3.fromRGB(24, 24, 28), M.SmoothPlastic)
-	for i = -6, 6 do
+	-- закусочная с будкой киномеханика: луч проектора бьёт в экран
+	local x1, x2, z1, z2 = -11, 11, 50, 64
+	room(model, P, x1, x2, z1, z2, 9, Color3.fromRGB(120, 110, 96), M.Brick, {
+		N = { { c = -6, w = 5 } }, S = { { c = 6, w = 5 } },
+	}, { lampColor = Color3.fromRGB(255, 200, 140), flicker = true })
+	B("Counter", -9, 2, 0, 3.4, 56, 58, Color3.fromRGB(140, 40, 40), M.SmoothPlastic)
+	B("Popcorn", 3, 6, 3.4, 7, 56, 58.5, Color3.fromRGB(255, 220, 120), M.Glass, { Transparency = 0.3 })
+	local tv = B("TV", 6, 10, 0, 4, 60, 63, Color3.fromRGB(40, 38, 42), M.SmoothPlastic)
+	local scr = mk(model, "TVScreen", Vector3.new(2.8, 2.4, 0.1), tv.Position + Vector3.new(0, 0.4, -1.55), Color3.fromRGB(150, 170, 200), M.Neon, NOCOL)
+	tag(scr, "P2D_Flicker", { Strong = true })
+	B("Arcade", -10, -7, 0, 6.5, 61, 63.5, Color3.fromRGB(30, 28, 34), M.SmoothPlastic)
+	local arcadeScr = B("ArcadeScreen", -9.6, -7.4, 4, 5.6, 60.9, 61, Color3.fromRGB(120, 60, 200), M.Neon, NOCOL)
+	tag(arcadeScr, "P2D_Flicker")
+	local sign = B("KinoSign", -8, 8, 10, 13.5, 56.6, 57.4, Color3.fromRGB(20, 6, 8), M.SmoothPlastic)
+	surfaceText(sign, Enum.NormalId.Front, "КИНО", { color = Color3.fromRGB(255, 50, 50), font = Enum.Font.GothamBlack })
+	local neonBar = B("KinoNeon", -8, 8, 9.6, 10, 56.5, 56.7, Color3.fromRGB(255, 40, 40), M.Neon, NOCOL)
+	tag(neonBar, "P2D_Flicker")
+	pointLight(neonBar, Color3.fromRGB(255, 50, 50), 22, 1)
+	local projector = B("ProjectorWindow", -1, 1, 6, 7.5, 49.1, 49.3, Color3.fromRGB(255, 255, 230), M.Neon, NOCOL)
+	local a0 = Instance.new("Attachment")
+	a0.Parent = projector
+	local a1 = Instance.new("Attachment")
+	a1.Parent = screen
+	local pbeam = Instance.new("Beam")
+	pbeam.Attachment0 = a0
+	pbeam.Attachment1 = a1
+	pbeam.Width0 = 1.4
+	pbeam.Width1 = 44
+	pbeam.FaceCamera = true
+	pbeam.LightEmission = 1
+	pbeam.LightInfluence = 0
+	pbeam.Segments = 1
+	pbeam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.7), NumberSequenceKeypoint.new(1, 0.93) })
+	pbeam.Color = ColorSequence.new(Color3.fromRGB(200, 210, 255))
+	pbeam.Parent = projector
+
+	-- гирлянды
+	for _, z in ipairs({ -6, 40 }) do
+		for x = -48, 48, 8 do
+			local bulb = ball(model, "Bulb", 0.6, P + Vector3.new(x, 9 + math.sin(x / 8) * 0.6, z), Color3.fromRGB(255, 200, 120), M.Neon, NOCOL)
+			if x % 24 == 0 then pointLight(bulb, Color3.fromRGB(255, 190, 110), 14, 0.7) end
+		end
 		for _, s in ipairs({ -1, 1 }) do
-			mk(model, "Pin", Vector3.new(0.8, 0.5, 2.4), L(i * 2, 0.3, s * 15), Color3.fromRGB(200, 200, 210), M.Metal, FLAT)
-			mk(model, "Pin", Vector3.new(2.4, 0.5, 0.8), L(s * 15, 0.3, i * 2), Color3.fromRGB(200, 200, 210), M.Metal, FLAT)
+			B("GarlandPole", s * 50 - 0.3, s * 50 + 0.3, 0, 10, z - 0.3, z + 0.3, Color3.fromRGB(70, 56, 40), M.Wood)
 		end
 	end
-	surfaceText(cpu, Enum.NormalId.Top, "PRESS2DIE\nCPU-16  ©1994", { color = Color3.fromRGB(110, 110, 120), pps = 8 })
 
-	-- чипы
-	for _, c in ipairs({
-		{ -56, -30, 20, 12, "RAM 64K" }, { 56, -30, 20, 12, "VIDEO PPU" },
-		{ -56, 14, 14, 14, "SOUND FM" }, { 56, 22, 12, 18, "BIOS v1.0" },
-	}) do
-		local chip = mk(model, "Chip", Vector3.new(c[3], 3, c[4]), L(c[1], 1.5, c[2]), Color3.fromRGB(20, 20, 24), M.SmoothPlastic)
-		surfaceText(chip, Enum.NormalId.Top, c[5], { color = Color3.fromRGB(150, 150, 160), font = Enum.Font.Arcade, pps = 10 })
-		local n = math.floor(c[3] / 2.5)
-		for i = 0, n - 1 do
-			local x = c[1] - c[3] / 2 + 1.25 + i * 2.5
-			for _, s in ipairs({ -1, 1 }) do
-				mk(model, "Pin", Vector3.new(0.7, 0.5, 1.8), L(x, 0.3, c[2] + s * (c[4] / 2 + 0.8)), Color3.fromRGB(200, 200, 210), M.Metal, FLAT)
-			end
-		end
+	-- ограда площадки и закрытые ворота
+	local fenceC = Color3.fromRGB(80, 84, 88)
+	for _, w in ipairs({ { -60, 60, -46, -45.7 }, { -60, 60, 72, 72.3 }, { -60.3, -60, -46, 72 }, { 60, 60.3, -46, 50 } }) do
+		B("LotFence", w[1], w[2], 0, 7, w[3], w[4], fenceC, M.Metal, { Transparency = 0.45 })
 	end
-	-- конденсаторы
-	for _, c in ipairs({ { -66, -64 }, { -56, -66 }, { -66, -54 }, { 64, -64 }, { 54, -66 }, { -30, -64 }, { 30, -64 } }) do
-		cyl(model, "Capacitor", 9, 5, L(c[1], 4.5, c[2]), Color3.fromRGB(24, 36, 90), M.SmoothPlastic)
-		cyl(model, "CapTop", 0.3, 4.6, L(c[1], 9.1, c[2]), Color3.fromRGB(190, 190, 200), M.Metal, FLAT)
-		mk(model, "CapStripe", Vector3.new(0.4, 8, 1), L(c[1] + 2.45, 4.5, c[2]), Color3.fromRGB(220, 220, 230), M.SmoothPlastic, FLAT)
-	end
-	-- радиатор: между рёбрами можно пройти
-	mk(model, "HeatsinkBase", Vector3.new(24, 1, 22), L(62, 0.5, -4), Color3.fromRGB(150, 155, 165), M.Metal)
-	for i = 0, 6 do
-		mk(model, "Fin", Vector3.new(0.8, 14, 22), L(51 + i * 3.6, 8, -4), Color3.fromRGB(170, 175, 185), M.Metal)
-	end
-	-- радужный шлейф
-	local ribbon = { Color3.fromRGB(230, 60, 60), Color3.fromRGB(240, 150, 40), Color3.fromRGB(240, 220, 60),
-		Color3.fromRGB(80, 200, 90), Color3.fromRGB(60, 140, 240), Color3.fromRGB(150, 90, 230), Color3.fromRGB(220, 220, 230) }
-	for i, col in ipairs(ribbon) do
-		mk(model, "Ribbon", Vector3.new(50, 0.25, 0.9), L(-54, 0.15, -14 + i * 0.95), col, M.SmoothPlastic, FLAT)
-	end
-	mk(model, "RibbonPlug", Vector3.new(4, 2.5, 9), L(-27, 1.25, -10.2), Color3.fromRGB(30, 30, 34), M.SmoothPlastic)
+	B("LotGate", 60, 60.4, 0, 7, 50, 72, Color3.fromRGB(110, 40, 30), M.Metal)
+	B("TicketBooth", 63, 69, 0, 8, 54, 60, Color3.fromRGB(150, 140, 120), M.WoodPlanks)
 
-	-- картридж, вставленный сверху: светящиеся контакты над процессором
-	local cart = mk(model, "TopCartridge", Vector3.new(44, 16, 6), L(0, H - 8, 0), Color3.fromRGB(120, 118, 126), M.SmoothPlastic)
-	surfaceText(cart, Enum.NormalId.Front, "PRESS 2 DIE", { font = Enum.Font.Arcade, color = Color3.fromRGB(190, 20, 20) })
-	surfaceText(cart, Enum.NormalId.Back, "НЕ ВЫНИМАЙ", { color = Color3.fromRGB(190, 20, 20) })
-	for i = -9, 9 do
-		mk(model, "CartPin", Vector3.new(1.2, 2, 6.4), L(i * 2.2, H - 17, 0), GOLD, M.Neon, NOCOL)
-	end
-	local pinsLight = mk(model, "CartGlow", Vector3.new(1, 1, 1), L(0, H - 20, 0), BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
-	pointLight(pinsLight, Color3.fromRGB(255, 120, 60), 50, 1.4)
-
-	-- большой экран статуса (содержимое рисует клиент)
-	mk(model, "ScreenBezel", Vector3.new(64, 34, 1.4), L(0, 25, -half + 0.3), Color3.fromRGB(26, 26, 30), M.SmoothPlastic)
-	mk(model, "LobbyScreen", Vector3.new(60, 30, 0.4), L(0, 25, -half + 1.1), Color3.fromRGB(4, 6, 8), M.SmoothPlastic)
-	local screenLight = mk(model, "ScreenGlow", Vector3.new(1, 1, 1), L(0, 25, -half + 6), BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
-	pointLight(screenLight, Color3.fromRGB(255, 70, 70), 40, 0.8)
-
-	-- надписи на стенах
-	local w1 = mk(model, "WallSign", Vector3.new(0.3, 7, 50), L(-half + 0.2, 26, 0), BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false })
-	surfaceText(w1, Enum.NormalId.Right, "НЕ ВЫКЛЮЧАЙ ПРИСТАВКУ", { color = Color3.fromRGB(190, 20, 20) })
-	local w2 = mk(model, "WallSign", Vector3.new(0.3, 7, 50), L(half - 0.2, 26, 0), BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false })
-	surfaceText(w2, Enum.NormalId.Left, "ИГРА НЕ СОХРАНЕНА", { color = Color3.fromRGB(190, 20, 20) })
-	local floorHint = mk(model, "FloorHint", Vector3.new(70, 0.1, 5), L(0, 0.06, 30), BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
-	surfaceText(floorHint, Enum.NormalId.Top, "»  ВСТАНЬ НА ПЛАТФОРМУ КАРТРИДЖА — ВЫБЕРИ УРОВЕНЬ  «", { color = Color3.fromRGB(230, 220, 150), pps = 12 })
-
-	-- индикатор питания
-	local power = mk(model, "PowerLED", Vector3.new(3, 3, 1), L(-70, 46, -half + 0.6), Color3.fromRGB(255, 30, 30), M.Neon, NOCOL)
-	pointLight(power, Color3.fromRGB(255, 30, 30), 30, 2)
-	tag(power, "P2D_Blink", { Rate = 0.5 })
-	for _, p in ipairs({ { -40, -40 }, { 40, -40 }, { -40, 40 }, { 40, 40 } }) do
-		local lamp = mk(model, "AmbientLamp", Vector3.new(1, 1, 1), L(p[1], 30, p[2]), BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
-		pointLight(lamp, Color3.fromRGB(120, 255, 170), 60, 0.5)
-	end
-
-	-- картриджи-голосовалки на юге
-	for idx, info in ipairs(MAP_INFO) do
-		local x = -45 + (idx - 1) * 30
-		local col = Color3.fromRGB(info.color[1], info.color[2], info.color[3])
-		mk(model, "CartSlot", Vector3.new(20, 3, 6), L(x, 1.5, 62), Color3.fromRGB(20, 20, 24), M.SmoothPlastic)
-		for k = -4, 4 do
-			mk(model, "SlotPin", Vector3.new(0.6, 0.2, 5), L(x + k * 2, 3.05, 62), GOLD, M.Metal, FLAT)
-		end
-		mk(model, "VoteCartridge", Vector3.new(16, 20, 3), L(x, 12, 62), Color3.fromRGB(150, 148, 156), M.SmoothPlastic)
-		for k = 0, 3 do
-			mk(model, "Ridge", Vector3.new(14, 0.4, 0.3), L(x, 20.5 - k * 0.9, 60.4), Color3.fromRGB(110, 108, 116), M.SmoothPlastic, FLAT)
-		end
-		local label = mk(model, "CartLabel", Vector3.new(13, 12, 0.2), L(x, 12.5, 60.4), Color3.new(1, 1, 1), M.SmoothPlastic, NOCOL)
-		local sg = surfaceGui(label, Enum.NormalId.Front, 24)
-		local bg = Instance.new("Frame")
-		bg.Size = UDim2.fromScale(1, 1)
-		bg.BackgroundColor3 = col
-		bg.BorderSizePixel = 0
-		bg.Parent = sg
-		local grad = Instance.new("UIGradient")
-		grad.Rotation = 90
-		grad.Color = ColorSequence.new(Color3.new(1, 1, 1), Color3.fromRGB(40, 30, 40))
-		grad.Parent = bg
-		for k = 0, 2 do
-			local stripe = Instance.new("Frame")
-			stripe.AnchorPoint = Vector2.new(0.5, 0.5)
-			stripe.Position = UDim2.fromScale(0.15 + k * 0.12, 0.3)
-			stripe.Size = UDim2.new(0, 18, 1.6, 0)
-			stripe.Rotation = 30
-			stripe.BorderSizePixel = 0
-			stripe.BackgroundColor3 = Color3.new(1, 1, 1)
-			stripe.BackgroundTransparency = 0.75
-			stripe.Parent = bg
-		end
-		local function lbl(text, y, h, font, color)
-			local t = Instance.new("TextLabel")
-			t.BackgroundTransparency = 1
-			t.Position = UDim2.fromScale(0.06, y)
-			t.Size = UDim2.fromScale(0.88, h)
-			t.Font = font
-			t.TextScaled = true
-			t.TextColor3 = color
-			t.TextStrokeTransparency = 0.4
-			t.Text = text
-			t.Parent = bg
-			return t
-		end
-		lbl("PRESS2DIE", 0.04, 0.1, Enum.Font.Arcade, Color3.fromRGB(255, 230, 230))
-		lbl(info.name, 0.24, 0.24, Enum.Font.GothamBlack, Color3.new(1, 1, 1))
-		lbl(info.sub, 0.5, 0.1, Enum.Font.GothamBold, Color3.fromRGB(230, 230, 230))
-		local votes = lbl("ГОЛОСОВ: 0", 0.78, 0.14, Enum.Font.GothamBlack, Color3.fromRGB(255, 230, 120))
-		local padPart = mk(model, "VotePad", Vector3.new(14, 0.4, 12), L(x, 0.2, 47), col, M.Neon, { Transparency = 0.5 })
-		surfaceText(padPart, Enum.NormalId.Top, "ГОЛОС", { color = Color3.new(1, 1, 1), pps = 14 })
-		pointLight(padPart, col, 18, 0.8)
-		table.insert(lobbyPads, { key = info.key, center = padPart.Position, hx = 7, hz = 6, label = votes, pad = padPart })
+	for _ = 1, 70 do
+		local a = r:NextNumber(0, math.pi * 2)
+		local d = r:NextNumber(78, 180)
+		local p = P + Vector3.new(math.cos(a) * d, 0, math.sin(a) * d)
+		pine(model, Vector3.new(p.X, groundY(p + Vector3.new(0, 40, 0)) - 1, p.Z), r:NextNumber(30, 48), r, 2)
 	end
 
 	local spawn = Instance.new("SpawnLocation")
 	spawn.Name = "LobbySpawn"
 	spawn.Anchored = true
-	spawn.Size = Vector3.new(14, 1, 14)
-	spawn.Position = L(0, 3.5, 0)
+	spawn.Size = Vector3.new(16, 1, 10)
+	spawn.Position = P + Vector3.new(0, 0.5, 34)
 	spawn.Neutral = true
 	spawn.Duration = 0
 	spawn.Transparency = 1
@@ -1792,11 +2194,12 @@ do
 end
 
 local function lobbyCFrame()
-	return CFrame.new(CONFIG.LOBBY_POS + Vector3.new(rng:NextNumber(-9, 9), 7, rng:NextNumber(-9, 9)))
+	local pos = CONFIG.LOBBY_POS + Vector3.new(rng:NextNumber(-14, 14), 4, rng:NextNumber(28, 40))
+	return CFrame.lookAt(pos, CONFIG.LOBBY_POS + Vector3.new(0, 4, -40))
 end
 
 ------------------------------------------------------------------------
--- СЦЕНА ВЫБОРА: 6 подиумов с прожекторами, монитор Палача, закулисье
+-- СЦЕНА ВЫБОРА: старый театр — 6 подиумов с прожекторами, монитор Палача, закулисье
 ------------------------------------------------------------------------
 local STAGE = CONFIG.STAGE_POS
 local SLOT_SPACING = 9
@@ -1818,22 +2221,42 @@ do
 	model.Parent = Workspace
 	local S = STAGE
 	local function L(x, y, z) return S + Vector3.new(x, y, z) end
+	local function B(...) return box(model, S, ...) end
+	local DARK = Color3.fromRGB(16, 12, 12)
 
-	mk(model, "StageFloor", Vector3.new(78, 2, 30), L(0, -1, 3), Color3.fromRGB(18, 16, 20), M.SmoothPlastic, { Reflectance = 0.12 })
-	mk(model, "StageRiser", Vector3.new(78, 6, 1), L(0, -3, -12.5), Color3.fromRGB(14, 12, 16), M.SmoothPlastic)
-	mk(model, "StageTrim", Vector3.new(78, 0.35, 0.35), L(0, -0.1, -12.1), BLOOD, M.Neon, NOCOL)
+	-- сцена из старых досок
+	B("StageFloor", -39, 39, -2, 0, -12, 18, Color3.fromRGB(70, 50, 36), M.WoodPlanks)
+	B("StageRiser", -39, 39, -6, 0, -13, -12, Color3.fromRGB(40, 26, 22), M.WoodPlanks)
+	B("StageTrim", -39, 39, -0.3, 0.05, -12.4, -12, Color3.fromRGB(150, 110, 50), M.Metal, NOCOL)
 	for k = -13, 13 do
 		local f = mk(model, "Footlight", Vector3.new(1.2, 0.4, 0.6), L(k * 2.8, 0.2, -11.4), Color3.fromRGB(255, 190, 120), M.Neon, NOCOL)
 		if k % 4 == 0 then pointLight(f, Color3.fromRGB(255, 160, 90), 9, 0.6) end
+		if k % 5 == 0 then f.Color = Color3.fromRGB(60, 40, 30) end -- перегоревшие
 	end
-	mk(model, "Pit", Vector3.new(220, 2, 120), L(0, -7, -70), Color3.fromRGB(6, 6, 8), M.Slate)
+	-- зал: стены, потолок, ряды кресел
+	B("Pit", -46, 46, -8, -6, -70, -13, Color3.fromRGB(20, 14, 14), M.WoodPlanks)
+	for z = -22, -58, -5 do
+		B("SeatRow", -36, 36, -6, -4.2, z - 1, z + 1, Color3.fromRGB(80, 16, 22), M.Fabric)
+		B("SeatBack", -36, 36, -6, -2.4, z + 1, z + 1.6, Color3.fromRGB(70, 14, 20), M.Fabric)
+	end
+	for _, s in ipairs({ -1, 1 }) do
+		B("HallWall", s * 46 - 1, s * 46 + 1, -8, 44, -72, 22, DARK, M.WoodPlanks)
+		B("Proscenium", math.min(s * 39, s * 46), math.max(s * 39, s * 46), -6, 44, -14, -12, Color3.fromRGB(60, 20, 22), M.Fabric)
+		local sconce = mk(model, "Sconce", Vector3.new(0.6, 1.2, 0.6), L(s * 44.6, 10, -40), Color3.fromRGB(255, 170, 90), M.Neon, NOCOL)
+		pointLight(sconce, Color3.fromRGB(255, 150, 80), 18, 0.5)
+		tag(sconce, "P2D_Flicker")
+	end
+	B("RearWall", -46, 46, -8, 44, -73, -71, DARK, M.WoodPlanks)
+	B("HallCeiling", -46, 46, 44, 46, -72, 22, Color3.fromRGB(12, 10, 10), M.WoodPlanks)
+	B("ProsceniumTop", -39, 39, 28, 44, -14, -12, Color3.fromRGB(60, 20, 22), M.Fabric)
 
-	-- задник: логотип и пиксельные черепа
-	mk(model, "BackWall", Vector3.new(100, 46, 2), L(0, 21, 18), Color3.fromRGB(14, 12, 16), M.SmoothPlastic)
+	-- задник: мерцающая неоновая вывеска и пиксельные черепа (единственный «игровой» намёк)
+	B("BackWall", -46, 46, -2, 44, 17, 19, DARK, M.WoodPlanks)
 	local logo = mk(model, "Logo", Vector3.new(56, 8, 0.4), L(0, 23.5, 16.8), Color3.fromRGB(8, 6, 8), M.SmoothPlastic)
 	surfaceText(logo, Enum.NormalId.Front, "PRESS 2 DIE", { font = Enum.Font.Arcade, color = Color3.fromRGB(230, 30, 30) })
 	for _, e in ipairs({ { 0, 27.8, 57.6, 0.4 }, { 0, 19.2, 57.6, 0.4 }, { -28.6, 23.5, 0.4, 8.8 }, { 28.6, 23.5, 0.4, 8.8 } }) do
-		mk(model, "LogoNeon", Vector3.new(e[3], e[4], 0.4), L(e[1], e[2], 16.6), Color3.fromRGB(255, 40, 40), M.Neon, NOCOL)
+		local n = mk(model, "LogoNeon", Vector3.new(e[3], e[4], 0.4), L(e[1], e[2], 16.6), Color3.fromRGB(255, 40, 40), M.Neon, NOCOL)
+		tag(n, "P2D_Flicker")
 	end
 	local wash = mk(model, "LogoWash", Vector3.new(50, 1, 0.2), L(0, 18.6, 16.4), BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
 	local sl = Instance.new("SurfaceLight")
@@ -1843,16 +2266,18 @@ do
 	sl.Brightness = 0.7
 	sl.Color = Color3.fromRGB(255, 40, 40)
 	sl.Parent = wash
+	local SKULL = { "..#####..", ".#######.", "##.###.##", "#...#...#", "##.###.##", ".#######.", "..#.#.#..", "..#####.." }
 	for _, sx in ipairs({ -36, 36 }) do
 		pixelArt(model, CFrame.new(L(sx, 13, 16.6)), SKULL, 1.1, { ["#"] = Color3.fromRGB(230, 225, 210) }, 0.3)
 	end
-	-- кулисы
+	-- рваные кулисы
 	for _, s in ipairs({ -1, 1 }) do
 		for k = 0, 5 do
-			cyl(model, "Curtain", 34, 2.6, L(s * (35 + k * 0.9), 17, -9 + k * 4.4), (k % 2 == 0) and Color3.fromRGB(90, 12, 18) or Color3.fromRGB(64, 8, 12), M.Fabric)
+			local h = 30 - (k % 3) * 4
+			cyl(model, "Curtain", h, 2.6, L(s * (35 + k * 0.6), 28 - h / 2, -9 + k * 4.4), (k % 2 == 0) and Color3.fromRGB(90, 12, 18) or Color3.fromRGB(64, 8, 12), M.Fabric)
 		end
 		local rim = mk(model, "RimLight", Vector3.new(1, 1, 1), L(s * 30, 8, 10), BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
-		pointLight(rim, Color3.fromRGB(60, 80, 255), 26, 1.4)
+		pointLight(rim, Color3.fromRGB(60, 80, 255), 26, 1.2)
 		mk(model, "TrussLeg", Vector3.new(0.8, 21, 0.8), L(s * 33, 10.5, -3.5), Color3.fromRGB(60, 60, 66), M.Metal)
 	end
 	mk(model, "Truss", Vector3.new(68, 0.8, 0.8), L(0, 20.6, -3.5), Color3.fromRGB(60, 60, 66), M.Metal)
@@ -1864,7 +2289,6 @@ do
 		local podium = cyl(model, "Podium", PODIUM_H, 6, L(x, PODIUM_H / 2, 0), Color3.fromRGB(26, 24, 30), M.SmoothPlastic)
 		local ring = cyl(model, "PodiumRing", 0.3, 6.4, L(x, PODIUM_H - 0.1, 0), Color3.fromRGB(50, 46, 54), M.SmoothPlastic, NOCOL)
 		local pool = cyl(model, "LightPool", 0.06, 5.4, L(x, PODIUM_H + 0.04, 0), SPOT_WARM, M.Neon, { Transparency = 1, CanCollide = false, CanQuery = false, CastShadow = false })
-		-- табло на передней стороне подиума
 		local panel = mk(model, "PodiumPanel", Vector3.new(4.8, 1.7, 0.3), L(x, 1.2, -3.05), BLACK, M.SmoothPlastic, NOCOL)
 		local sg = surfaceGui(panel, Enum.NormalId.Front, 80)
 		local plate = Instance.new("Frame")
@@ -1888,46 +2312,39 @@ do
 		local nameText = txt({ Position = UDim2.fromScale(0.33, 0.58), Size = UDim2.fromScale(0.64, 0.34), Font = Enum.Font.GothamMedium,
 			Text = "", TextColor3 = Color3.fromRGB(220, 220, 220), TextXAlignment = Enum.TextXAlignment.Left })
 
-		-- прожектор над местом
 		local lampPos = L(x, 18.4, -4.2)
 		local target = L(x, PODIUM_H, 0)
 		local aim = CFrame.lookAt(lampPos, target) * ALONG_Z -- ось цилиндра смотрит на подиум
 		mk(model, "SpotHanger", Vector3.new(0.3, 2, 0.3), L(x, 19.6, -3.8), Color3.fromRGB(40, 40, 44), M.Metal)
 		mk(model, "SpotHousing", Vector3.new(2.6, 1.9, 1.9), aim, Color3.fromRGB(22, 22, 26), M.Metal, { Shape = CYL })
 		local lens = mk(model, "SpotLens", Vector3.new(0.2, 1.6, 1.6), aim * CFrame.new(1.35, 0, 0), LENS_OFF, M.Neon, { Shape = CYL, CanCollide = false, CanQuery = false })
-		local spot = Instance.new("SpotLight")
-		spot.Face = Enum.NormalId.Right
-		spot.Range = 30
-		spot.Angle = 32
-		spot.Brightness = 9
+		local spot = spotLight(lens, Enum.NormalId.Right, SPOT_WARM, 30, 32, 9)
 		spot.Shadows = true
-		spot.Color = SPOT_WARM
 		spot.Enabled = false
-		spot.Parent = lens
-		local a0 = Instance.new("Attachment")
-		a0.Position = Vector3.new(0.15, 0, 0)
-		a0.Parent = lens
-		local a1 = Instance.new("Attachment")
-		a1.Position = Vector3.new(0, 0.05, 0)
-		a1.Parent = pool
-		local beam = Instance.new("Beam")
-		beam.Attachment0 = a0
-		beam.Attachment1 = a1
-		beam.Width0 = 1.5
-		beam.Width1 = 6.4
-		beam.FaceCamera = true
-		beam.LightEmission = 1
-		beam.LightInfluence = 0
-		beam.Segments = 1
-		beam.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0.86) })
-		beam.Color = ColorSequence.new(SPOT_WARM)
-		beam.Enabled = false
-		beam.Parent = lens
-		slots[i] = { podium = podium, ring = ring, pool = pool, lens = lens, spot = spot, beam = beam,
+		local at0 = Instance.new("Attachment")
+		at0.Position = Vector3.new(0.15, 0, 0)
+		at0.Parent = lens
+		local at1 = Instance.new("Attachment")
+		at1.Position = Vector3.new(0, 0.05, 0)
+		at1.Parent = pool
+		local bm = Instance.new("Beam")
+		bm.Attachment0 = at0
+		bm.Attachment1 = at1
+		bm.Width0 = 1.5
+		bm.Width1 = 6.4
+		bm.FaceCamera = true
+		bm.LightEmission = 1
+		bm.LightInfluence = 0
+		bm.Segments = 1
+		bm.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.5), NumberSequenceKeypoint.new(1, 0.86) })
+		bm.Color = ColorSequence.new(SPOT_WARM)
+		bm.Enabled = false
+		bm.Parent = lens
+		slots[i] = { podium = podium, ring = ring, pool = pool, lens = lens, spot = spot, beam = bm,
 			plate = plate, charText = charText, nameText = nameText, litId = nil, token = 0 }
 	end
 
-	-- туман на сцене
+	-- пыль в лучах
 	local fog = mk(model, "StageFog", Vector3.new(66, 1, 18), L(0, 0.6, 2), BLACK, M.SmoothPlastic, { Transparency = 1, CanCollide = false, CanQuery = false })
 	local pe = Instance.new("ParticleEmitter")
 	pe.Texture = "rbxasset://textures/particles/smoke_main.dds"
@@ -1941,7 +2358,7 @@ do
 	pe.RotSpeed = NumberRange.new(-10, 10)
 	pe.Parent = fog
 
-	-- монитор Палача: висит над сценой; клиент опускает его, когда Палач выбрал облик
+	-- монитор Палача: ЭЛТ-телевизор на цепях; клиент опускает его, когда Палач выбрал облик
 	local mon = Instance.new("Model")
 	mon.Name = "KillerMonitor"
 	mon.Parent = model
@@ -1958,7 +2375,7 @@ do
 	tag(rec, "P2D_Blink", { Rate = 1.4 })
 	for _, s in ipairs({ -1, 1 }) do
 		mk(mon, "Antenna", Vector3.new(0.15, 5, 0.15), lowered * CFrame.new(s * 1.4, 6.4, 1) * CFrame.Angles(0, 0, math.rad(-28 * s)), Color3.fromRGB(180, 180, 190), M.Metal, NOCOL)
-		cyl(mon, "Cable", 40, 0.3, lowered * CFrame.new(s * 4.5, 24.5, 0), BLACK, M.SmoothPlastic, NOCOL)
+		cyl(mon, "Chain", 40, 0.3, lowered * CFrame.new(s * 4.5, 24.5, 0), Color3.fromRGB(60, 60, 64), M.Metal, NOCOL)
 	end
 	mon.PrimaryPart = body
 	local raised = lowered + Vector3.new(0, 30, 0)
@@ -1980,24 +2397,14 @@ do
 	sealedBox(HOLD_KILLER, 12, 12)
 end
 
-------------------------------------------------------------------------
--- РЕЕСТР КАРТ
-------------------------------------------------------------------------
-local MAPS = {
-	Hills = buildHills(Vector3.new(2000, 0, 0)),
-	Arcade = buildArcade(Vector3.new(4000, 0, 0)),
-	Maze = buildMaze(Vector3.new(6000, 0, 0)),
-	Room = buildRoom(Vector3.new(8000, 0, 0)),
-}
-
 -- зоны для клиентских пресетов освещения
 do
 	local zones = {
-		{ k = "Lobby", x = CONFIG.LOBBY_POS.X, y = CONFIG.LOBBY_POS.Y, z = CONFIG.LOBBY_POS.Z, h = 140 },
+		{ k = "Lobby", x = CONFIG.LOBBY_POS.X, y = CONFIG.LOBBY_POS.Y, z = CONFIG.LOBBY_POS.Z, h = 240 },
 		{ k = "Stage", x = STAGE.X, y = STAGE.Y, z = STAGE.Z, h = 220 },
 	}
 	for key, def in pairs(MAPS) do
-		table.insert(zones, { k = key, x = def.origin.X, y = def.origin.Y, z = def.origin.Z, h = 170 })
+		table.insert(zones, { k = key, x = def.origin.X, y = def.origin.Y, z = def.origin.Z, h = 240 })
 	end
 	gameState:SetAttribute("Zones", HttpService:JSONEncode(zones))
 end
@@ -2011,21 +2418,17 @@ local killer = nil
 local killerChar = nil     -- данные персонажа Палача
 local killerMods = nil
 local kills = 0
-local survivorList = {}    -- { {player, userId, name, dname, charId, port, tokens, status} }
+local survivorList = {}    -- { {player, userId, name, dname, charId, port, status} }
 local entryOf = {}
 local matchConns = {}
 local lastMap, lastKiller = nil, nil
 local stamina = {}         -- [player] = {value, max, exhausted, regenAt, want, isKiller, speedMul}
 local boostUntil = {}
 local matchEndAt = 0
-local activeTokens = {}
-local tokensGot, tokensNeeded = 0, 0
-local dashUntil, vanishUntil = 0, 0
-local vanishSaved = nil
+local fx = { dashUntil = 0, vanishUntil = 0, vanishSaved = nil, stunUntil = 0, stunImmuneUntil = 0, bandage = {} }
 
 local function serverNow() return Workspace:GetServerTimeNow() end
 
--- бонусы из пипсов
 local function survivorMods(c)
 	return {
 		hp = 1 + (c.hp - 3) * 0.08,
@@ -2060,7 +2463,7 @@ end
 local function publishRoster()
 	local list = {}
 	for _, e in ipairs(survivorList) do
-		table.insert(list, { id = e.userId, c = e.charId, s = e.status, p = e.port, n = e.dname, t = e.tokens })
+		table.insert(list, { id = e.userId, c = e.charId, s = e.status, p = e.port, n = e.dname })
 	end
 	gameState:SetAttribute("Roster", HttpService:JSONEncode(list))
 	if killer and killerChar then
@@ -2141,8 +2544,24 @@ local function setRootAnchored(p, on)
 	if hrp then hrp.Anchored = on end
 end
 
+-- короткая вспышка частиц (Enabled переключается — надёжно реплицируется)
+local function burst(part, color, texture, count)
+	local pe = Instance.new("ParticleEmitter")
+	if texture then pe.Texture = texture end
+	pe.Rate = count or 40
+	pe.Lifetime = NumberRange.new(0.6, 1.2)
+	pe.Speed = NumberRange.new(4, 9)
+	pe.SpreadAngle = Vector2.new(180, 180)
+	pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.6), NumberSequenceKeypoint.new(1, 0) })
+	pe.LightEmission = 1
+	pe.Color = ColorSequence.new(color)
+	pe.Parent = part
+	task.delay(0.35, function() pe.Enabled = false end)
+	Debris:AddItem(pe, 2)
+end
+
 ------------------------------------------------------------------------
--- ВЫНОСЛИВОСТЬ, БЕГ (Shift), УСКОРЕНИЕ ПОСЛЕ УРОНА, РЫВОК/ПРЯТКИ ПАЛАЧА
+-- ВЫНОСЛИВОСТЬ, БЕГ (Shift), УСКОРЕНИЯ, ОГЛУШЕНИЕ, РЫВОК/ПРЯТКИ, ПЕРЕВЯЗКА
 -- Всё считается на сервере; клиент только сообщает «держу Shift».
 ------------------------------------------------------------------------
 local function initStamina(p, isKiller, mods)
@@ -2161,6 +2580,7 @@ end
 local function clearStamina(p)
 	stamina[p] = nil
 	boostUntil[p] = nil
+	fx.bandage[p] = nil
 	p:SetAttribute("MaxStamina", nil)
 	p:SetAttribute("Stamina", nil)
 	p:SetAttribute("Exhausted", nil)
@@ -2172,6 +2592,7 @@ local function watchDamage(p, hum)
 	table.insert(matchConns, hum.HealthChanged:Connect(function(h)
 		if h < last and h > 0 then
 			boostUntil[p] = os.clock() + CONFIG.HIT_BOOST_TIME
+			fx.bandage[p] = nil -- удар срывает перевязку
 		end
 		last = h
 	end))
@@ -2185,27 +2606,31 @@ end)
 local function setVanish(on)
 	local char = killer and killer.Character
 	if on then
-		if not char or vanishSaved then return end
-		vanishSaved = {}
+		if not char or fx.vanishSaved then return end
+		fx.vanishSaved = {}
 		for _, d in ipairs(char:GetDescendants()) do
 			if (d:IsA("BasePart") or d:IsA("Decal")) and d.Name ~= "HumanoidRootPart" then
-				vanishSaved[d] = d.Transparency
+				fx.vanishSaved[d] = d.Transparency
 				d.Transparency = 1
 			end
 		end
-		local aura = char:FindFirstChild("KillerAura", true)
-		if aura then aura.Enabled = false end
+		for _, n in ipairs({ "KillerAura", "P2D_Outline" }) do
+			local x = char:FindFirstChild(n, true)
+			if x then x.Enabled = false end
+		end
 	else
-		if vanishSaved then
-			for d, t in pairs(vanishSaved) do
+		if fx.vanishSaved then
+			for d, t in pairs(fx.vanishSaved) do
 				if d.Parent then d.Transparency = t end
 			end
 		end
-		vanishSaved = nil
-		vanishUntil = 0
+		fx.vanishSaved = nil
+		fx.vanishUntil = 0
 		if char then
-			local aura = char:FindFirstChild("KillerAura", true)
-			if aura then aura.Enabled = true end
+			for _, n in ipairs({ "KillerAura", "P2D_Outline" }) do
+				local x = char:FindFirstChild(n, true)
+				if x then x.Enabled = true end
+			end
 		end
 		if killer then killer:SetAttribute("AbilityUntil", 0) end
 	end
@@ -2214,7 +2639,7 @@ end
 RunService.Heartbeat:Connect(function(dt)
 	if not matchActive then return end
 	local now = os.clock()
-	if vanishSaved and now >= vanishUntil then setVanish(false) end
+	if fx.vanishSaved and now >= fx.vanishUntil then setVanish(false) end
 	for p, s in pairs(stamina) do
 		local char = p.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -2241,9 +2666,19 @@ RunService.Heartbeat:Connect(function(dt)
 			local speed = sprinting and run or base
 			local boosted = boostUntil[p] ~= nil and now < boostUntil[p]
 			if boosted then speed *= CONFIG.HIT_BOOST_MULT end
+			local bd = fx.bandage[p]
+			if bd then
+				if now < bd then
+					hum.Health = math.min(hum.MaxHealth, hum.Health + 15 * dt)
+					speed *= 0.7
+				else
+					fx.bandage[p] = nil
+				end
+			end
 			if p == killer then
-				if now < dashUntil then speed = CONFIG.DASH_SPEED end
-				if vanishSaved then speed *= 1.08 end
+				if now < fx.dashUntil then speed = CONFIG.DASH_SPEED end
+				if fx.vanishSaved then speed *= 1.08 end
+				if now < fx.stunUntil then speed = 0 end
 			end
 			hum.WalkSpeed = speed
 
@@ -2280,18 +2715,18 @@ local function markEscaped(e)
 		char:PivotTo(lobbyCFrame())
 	end
 	publishRoster()
-	announce(said(e, "сбежал", "сбежала") .. " из приставки!", "good")
+	announce(said(e, "сбежал", "сбежала") .. "!", "good")
 	announce("ПОБЕГ УДАЛСЯ! Можно наблюдать за остальными.", "good", e.player)
 end
 
 ------------------------------------------------------------------------
--- ОРУЖИЕ И СПОСОБНОСТИ ПАЛАЧА
+-- ОРУЖИЕ, ОГЛУШЕНИЕ И СПОСОБНОСТИ
 ------------------------------------------------------------------------
 local function weldTool(handle, name, size, offset, color, mat, shape)
 	local p = Instance.new("Part")
 	p.Name = name
-	p.Size = size
 	if shape then p.Shape = shape end
+	p.Size = size
 	p.Color = color
 	p.Material = mat
 	p.CanCollide = false
@@ -2311,13 +2746,13 @@ local TOOL_LOOKS = {
 	executioner = function(handle)
 		handle.Color = Color3.fromRGB(60, 40, 28)
 		handle.Material = M.Wood
-		weldTool(handle, "Blade", Vector3.new(0.14, 1.9, 1.1), CFrame.new(0, 1.55, 0.3), Color3.fromRGB(170, 170, 176), M.Metal)
-		weldTool(handle, "Edge", Vector3.new(0.16, 1.9, 0.12), CFrame.new(0, 1.55, 0.86), Color3.fromRGB(200, 20, 20), M.Neon)
+		weldTool(handle, "Blade", Vector3.new(0.18, 2.4, 1.5), CFrame.new(0, 1.8, 0.4), Color3.fromRGB(170, 170, 176), M.Metal)
+		weldTool(handle, "Edge", Vector3.new(0.2, 2.4, 0.14), CFrame.new(0, 1.8, 1.16), Color3.fromRGB(200, 20, 20), M.Neon)
 		return "Тесак"
 	end,
 	glitch = function(handle)
 		handle.Color = Color3.fromRGB(20, 20, 24)
-		local tip = weldTool(handle, "Spark", Vector3.new(0.6, 0.6, 0.6), CFrame.new(0, 1.9, 0), Color3.fromRGB(120, 240, 255), M.Neon, BALL)
+		local tip = weldTool(handle, "Spark", Vector3.new(0.7, 0.7, 0.7), CFrame.new(0, 1.9, 0), Color3.fromRGB(120, 240, 255), M.Neon, BALL)
 		local pe = Instance.new("ParticleEmitter")
 		pe.Rate = 18
 		pe.Lifetime = NumberRange.new(0.15, 0.35)
@@ -2331,11 +2766,141 @@ local TOOL_LOOKS = {
 	end,
 	binky = function(handle)
 		handle.Color = Color3.fromRGB(240, 240, 240)
-		weldTool(handle, "Candy", Vector3.new(0.4, 2, 2), CFrame.new(0, 2.2, 0), Color3.fromRGB(255, 80, 160), M.SmoothPlastic, CYL)
-		weldTool(handle, "Swirl", Vector3.new(0.42, 1.1, 1.1), CFrame.new(0, 2.2, 0), Color3.fromRGB(255, 240, 250), M.Neon, CYL)
+		weldTool(handle, "Candy", Vector3.new(0.4, 2.4, 2.4), CFrame.new(0, 2.4, 0), Color3.fromRGB(255, 80, 160), M.SmoothPlastic, CYL)
+		weldTool(handle, "Swirl", Vector3.new(0.42, 1.3, 1.3), CFrame.new(0, 2.4, 0), Color3.fromRGB(255, 240, 250), M.Neon, CYL)
 		return "Леденец"
 	end,
 }
+
+local function killerAlive()
+	local char = killer and killer.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if hum and hrp and hum.Health > 0 then return char, hrp end
+	return nil
+end
+
+-- оглушение Палача: стоит на месте, не бьёт; над головой мультяшные звёзды
+local function stunKiller(sec, byName)
+	if not matchActive or not killer then return false end
+	local now = os.clock()
+	if now < fx.stunImmuneUntil then return false end
+	local char = killerAlive()
+	if not char then return false end
+	fx.stunUntil = now + sec
+	fx.stunImmuneUntil = fx.stunUntil + CONFIG.STUN_IMMUNITY
+	fx.dashUntil = 0
+	if fx.vanishSaved then setVanish(false) end
+	killer:SetAttribute("StunnedUntil", serverNow() + sec)
+	fxEvent:FireClient(killer, "stunned", sec)
+	local head = char:FindFirstChild("Head")
+	if head then
+		local bb = Instance.new("BillboardGui")
+		bb.Name = "Dizzy"
+		bb.Size = UDim2.fromOffset(110, 44)
+		bb.StudsOffset = Vector3.new(0, 4.2, 0)
+		bb.Adornee = head
+		for i = 1, 4 do
+			local s = Instance.new("Frame")
+			s.AnchorPoint = Vector2.new(0.5, 0.5)
+			s.Size = UDim2.fromOffset(14, 14)
+			s.Rotation = 45
+			s.Position = UDim2.fromScale(i / 5, 0.5)
+			s.BackgroundColor3 = Color3.fromRGB(255, 220, 60)
+			s.BorderSizePixel = 0
+			s.Parent = bb
+		end
+		bb.Parent = head
+		tag(bb, "P2D_Dizzy")
+		Debris:AddItem(bb, sec)
+	end
+	announce(byName .. " оглушает Палача!", "good")
+	return true
+end
+
+local function clearLine(fromPos, toPos, ignore)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignore
+	return Workspace:Raycast(fromPos, toPos - fromPos, params) == nil
+end
+
+local function survivorAbility(p, e, char, hum, hrp)
+	local ab = e.char.ability
+	local now = os.clock()
+	if ab.id == "flash" then
+		local head = char:FindFirstChild("Head") or hrp
+		local l = pointLight(head, WHITE, 36, 14)
+		Debris:AddItem(l, 0.18)
+		burst(hrp, WHITE, nil, 60)
+		local kchar, khrp = killerAlive()
+		if kchar then
+			local d = khrp.Position - hrp.Position
+			if d.Magnitude <= CONFIG.FLASH_RANGE and d.Magnitude > 0 and d.Unit:Dot(hrp.CFrame.LookVector) > 0.55
+				and clearLine(head.Position, khrp.Position, { char, kchar }) then
+				if stunKiller(2.5, e.name) then fxEvent:FireClient(killer, "flashed") end
+			end
+		end
+	elseif ab.id == "punch" then
+		burst(hrp, Color3.fromRGB(255, 220, 60), nil, 30)
+		local kchar, khrp = killerAlive()
+		if kchar then
+			local d = khrp.Position - hrp.Position
+			if d.Magnitude <= CONFIG.PUNCH_RANGE and d.Magnitude > 0 and d.Unit:Dot(hrp.CFrame.LookVector) > 0.3 then
+				stunKiller(3.5, e.name)
+			end
+		end
+	elseif ab.id == "heal" then
+		burst(hrp, Color3.fromRGB(80, 255, 140), nil, 50)
+		hum.Health = math.min(hum.MaxHealth, hum.Health + 15)
+		for _, o in ipairs(survivorList) do
+			if o ~= e and o.status == "alive" then
+				local oc = o.player.Character
+				local oh = oc and oc:FindFirstChildOfClass("Humanoid")
+				local orp = oc and oc:FindFirstChild("HumanoidRootPart")
+				if oh and orp and oh.Health > 0 and (orp.Position - hrp.Position).Magnitude <= CONFIG.SUPPORT_RADIUS then
+					oh.Health = math.min(oh.MaxHealth, oh.Health + 35)
+					fxEvent:FireClient(o.player, "healed", e.name)
+				end
+			end
+		end
+	elseif ab.id == "boombox" then
+		burst(hrp, Color3.fromRGB(80, 255, 140), nil, 50)
+		for _, o in ipairs(survivorList) do
+			if o.status == "alive" then
+				local orp = o.player.Character and o.player.Character:FindFirstChild("HumanoidRootPart")
+				if orp and (orp.Position - hrp.Position).Magnitude <= CONFIG.SUPPORT_RADIUS then
+					local s = stamina[o.player]
+					if s then
+						s.value = s.max
+						s.exhausted = false
+					end
+					boostUntil[o.player] = now + ab.dur
+					if o ~= e then fxEvent:FireClient(o.player, "boost", e.name) end
+				end
+			end
+		end
+	elseif ab.id == "bandage" then
+		fx.bandage[p] = now + ab.dur
+	elseif ab.id == "smoke" then
+		local cloud = mk(Workspace, "SmokeCloud", Vector3.new(6, 1, 6), hrp.Position - Vector3.new(0, 2, 0), BLACK, M.SmoothPlastic,
+			{ Transparency = 1, CanCollide = false, CanQuery = false, CanTouch = false })
+		local pe = Instance.new("ParticleEmitter")
+		pe.Texture = "rbxasset://textures/particles/smoke_main.dds"
+		pe.Rate = 45
+		pe.Lifetime = NumberRange.new(3, 5)
+		pe.Speed = NumberRange.new(2, 6)
+		pe.SpreadAngle = Vector2.new(180, 180)
+		pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 6), NumberSequenceKeypoint.new(1, 14) })
+		pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
+		pe.Color = ColorSequence.new(Color3.fromRGB(150, 150, 150))
+		pe.RotSpeed = NumberRange.new(-20, 20)
+		pe.Parent = cloud
+		task.delay(5, function() pe.Enabled = false end)
+		Debris:AddItem(cloud, 11)
+		boostUntil[p] = now + ab.dur
+	end
+end
 
 local function giveKillerTool(player, hum)
 	local tool = Instance.new("Tool")
@@ -2357,16 +2922,16 @@ local function giveKillerTool(player, hum)
 
 	local last = 0
 	tool.Activated:Connect(function()
-		if not matchActive then return end
+		if not matchActive or os.clock() < fx.stunUntil then return end
 		local cd = CONFIG.KILLER_COOLDOWN * (killerMods and killerMods.attack or 1)
 		if os.clock() - last < cd then return end
 		last = os.clock()
-		if vanishSaved then setVanish(false) end -- удар раскрывает невидимку
+		if fx.vanishSaved then setVanish(false) end -- удар раскрывает невидимку
 		local anim = Instance.new("StringValue")
 		anim.Name = "toolanim"
 		anim.Value = "Slash"
 		anim.Parent = tool
-		game:GetService("Debris"):AddItem(anim, 1)
+		Debris:AddItem(anim, 1)
 		swing:Play()
 		local char = player.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -2437,18 +3002,11 @@ local function setupKiller()
 	giveKillerTool(killer, hum)
 end
 
-abilityEvent.OnServerEvent:Connect(function(p)
-	if not matchActive or p ~= killer or not killerChar then return end
-	local char = p.Character
-	local hum = char and char:FindFirstChildOfClass("Humanoid")
-	if not hum or hum.Health <= 0 then return end
-	local now = serverNow()
-	if now < (p:GetAttribute("AbilityReadyAt") or 0) then return end
+local function killerAbility(p, char)
+	if os.clock() < fx.stunUntil then return false end
 	local ab = killerChar.ability
-	p:SetAttribute("AbilityReadyAt", now + ab.cd)
-	p:SetAttribute("AbilityUntil", now + ab.dur)
 	if ab.id == "dash" then
-		dashUntil = os.clock() + ab.dur
+		fx.dashUntil = os.clock() + ab.dur
 		local trail = char:FindFirstChild("DashTrail", true)
 		if trail then
 			trail.Enabled = true
@@ -2463,73 +3021,40 @@ abilityEvent.OnServerEvent:Connect(function(p)
 			if e.status == "alive" then fxEvent:FireClient(e.player, "static", 1.6) end
 		end
 	elseif ab.id == "vanish" then
-		vanishUntil = os.clock() + ab.dur
+		fx.vanishUntil = os.clock() + ab.dur
 		setVanish(true)
 		fxEvent:FireClient(p, "vanish", ab.dur)
 		for _, e in ipairs(survivorList) do
 			if e.status == "alive" then fxEvent:FireClient(e.player, "giggle") end
 		end
 	end
+	return true
+end
+
+abilityEvent.OnServerEvent:Connect(function(p)
+	if not matchActive then return end
+	local char = p.Character
+	local hum = char and char:FindFirstChildOfClass("Humanoid")
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hum or not hrp or hum.Health <= 0 then return end
+	local now = serverNow()
+	if now < (p:GetAttribute("AbilityReadyAt") or math.huge) then return end
+	local c, ok
+	if p == killer and killerChar then
+		c = killerChar
+		ok = killerAbility(p, char)
+	else
+		local e = entryOf[p]
+		if not e or e.status ~= "alive" then return end
+		c = e.char
+		survivorAbility(p, e, char, hum, hrp)
+		ok = true
+	end
+	if ok then
+		p:SetAttribute("AbilityReadyAt", now + c.ability.cd)
+		p:SetAttribute("AbilityUntil", now + (c.ability.dur or 0))
+	end
 end)
-
-------------------------------------------------------------------------
--- ЖЕТОНЫ
-------------------------------------------------------------------------
-local function clearTokens()
-	for _, t in ipairs(activeTokens) do
-		if t.part.Parent then t.part:Destroy() end
-		if t.pillar.Parent then t.pillar:Destroy() end
-	end
-	activeTokens = {}
-end
-
-local function spawnTokens(def, count)
-	clearTokens()
-	local folder = def.dynamic:FindFirstChild("Tokens")
-	if not folder then
-		folder = Instance.new("Folder")
-		folder.Name = "Tokens"
-		folder.Parent = def.dynamic
-	end
-	local spots = table.clone(def.tokenSpots)
-	shuffle(spots)
-	for i = 1, math.min(count, #spots) do
-		local pos = spots[i]
-		local coin = mk(folder, "Token", Vector3.new(0.6, 3, 3), CFrame.new(pos + Vector3.new(0, 2.6, 0)), GOLD, M.Neon,
-			{ Shape = CYL, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false })
-		pointLight(coin, GOLD, 12, 1.4)
-		surfaceText(coin, Enum.NormalId.Right, "P", { font = Enum.Font.Arcade, color = Color3.fromRGB(150, 70, 0), pps = 40 })
-		surfaceText(coin, Enum.NormalId.Left, "2", { font = Enum.Font.Arcade, color = Color3.fromRGB(150, 70, 0), pps = 40 })
-		tag(coin, "P2D_Token")
-		local pillar = mk(folder, "TokenPillar", Vector3.new(26, 0.5, 0.5), CFrame.new(pos + Vector3.new(0, 16, 0)) * VERT, GOLD, M.Neon,
-			{ Shape = CYL, Transparency = 0.8, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false })
-		table.insert(activeTokens, { part = coin, pillar = pillar, pos = coin.Position })
-	end
-end
-
-local function checkTokens()
-	if #activeTokens == 0 then return end
-	for _, e in ipairs(survivorList) do
-		if e.status == "alive" then
-			local hrp = e.player.Character and e.player.Character:FindFirstChild("HumanoidRootPart")
-			if hrp then
-				for i = #activeTokens, 1, -1 do
-					local t = activeTokens[i]
-					if (hrp.Position - t.pos).Magnitude <= CONFIG.TOKEN_RADIUS then
-						t.part:Destroy()
-						t.pillar:Destroy()
-						table.remove(activeTokens, i)
-						tokensGot += 1
-						e.tokens += 1
-						gameState:SetAttribute("Tokens", tokensGot)
-						fxEvent:FireClient(e.player, "token", tokensGot, tokensNeeded)
-						publishRoster()
-					end
-				end
-			end
-		end
-	end
-end
 
 ------------------------------------------------------------------------
 -- ПРОВЕРКА ПОБЕГА (работает только на открытом выходе)
@@ -2565,6 +3090,7 @@ local function returnAllToLobby()
 		p:SetAttribute("Port", nil)
 		p:SetAttribute("AbilityReadyAt", nil)
 		p:SetAttribute("AbilityUntil", nil)
+		p:SetAttribute("StunnedUntil", nil)
 		p:SetAttribute("Kills", nil)
 		pcall(function() p.ReplicationFocus = nil end)
 		task.spawn(function()
@@ -2574,74 +3100,25 @@ local function returnAllToLobby()
 end
 
 ------------------------------------------------------------------------
--- ЛОББИ: голосование за картридж и таймер
+-- ЛОББИ-ТАЙМЕР; карта выбирается случайно и не повторяет прошлую
 ------------------------------------------------------------------------
-local function updateVotes()
-	local counts = {}
-	for _, info in ipairs(MAP_INFO) do counts[info.key] = 0 end
-	for _, p in ipairs(Players:GetPlayers()) do
-		local char = p.Character
-		local hrp = char and char:FindFirstChild("HumanoidRootPart")
-		if hrp and p:GetAttribute("InMatch") ~= true then
-			for _, pad in ipairs(lobbyPads) do
-				local d = hrp.Position - pad.center
-				if math.abs(d.X) <= pad.hx and math.abs(d.Z) <= pad.hz and d.Y > -2 and d.Y < 10 then
-					if p:GetAttribute("Vote") ~= pad.key then p:SetAttribute("Vote", pad.key) end
-				end
-			end
-		end
-		local v = p:GetAttribute("Vote")
-		if v and counts[v] then counts[v] += 1 end
-	end
-	for _, pad in ipairs(lobbyPads) do
-		local n = counts[pad.key]
-		pad.label.Text = "ГОЛОСОВ: " .. n
-		pad.pad.Transparency = n > 0 and 0.12 or 0.5
-	end
-	gameState:SetAttribute("Votes", HttpService:JSONEncode(counts))
-	return counts
-end
-
-task.spawn(function()
-	while true do
-		task.wait(0.4)
-		local ok, err = pcall(updateVotes)
-		if not ok then warn("[P2D] голосование: " .. tostring(err)) end
-	end
-end)
-
 local function pickMap()
-	local counts = updateVotes()
-	local best, pool = 0, {}
+	local pool = {}
 	for _, info in ipairs(MAP_INFO) do
-		local n = counts[info.key] or 0
-		if n > best then
-			best, pool = n, { info.key }
-		elseif n == best and n > 0 then
-			table.insert(pool, info.key)
-		end
-	end
-	if best == 0 then
-		pool = {}
-		for _, info in ipairs(MAP_INFO) do
-			if info.key ~= lastMap then table.insert(pool, info.key) end
-		end
+		if info.key ~= lastMap then table.insert(pool, info.key) end
 	end
 	return pool[rng:NextInteger(1, #pool)]
 end
 
-local function runCountdown()
+local function runCountdown(seconds)
 	setPhase("Countdown")
-	for t = CONFIG.LOBBY_COUNTDOWN, 1, -1 do
+	for t = seconds or CONFIG.LOBBY_COUNTDOWN, 1, -1 do
 		if #Players:GetPlayers() < CONFIG.MIN_PLAYERS then return nil end
 		gameState:SetAttribute("TimeLeft", t)
 		task.wait(1)
 	end
 	if #getReadyPlayers() < CONFIG.MIN_PLAYERS then return nil end
-	local mapKey = pickMap()
-	gameState:SetAttribute("MapKey", mapKey)
-	announce("КАРТРИДЖ ВЫБРАН: " .. MAP_BY_KEY[mapKey].name, "info")
-	return mapKey
+	return pickMap()
 end
 
 ------------------------------------------------------------------------
@@ -2725,11 +3202,11 @@ local function refreshPodiums()
 		local c = p and CHAR_BY_ID[pickOf[p]]
 		local s = slots[i]
 		if c then
-			local col = charColor(c)
+			local col = roleColor(c)
 			s.charText.Text = c.name
-			s.charText.TextColor3 = Color3.new(1, 1, 1)
+			s.charText.TextColor3 = WHITE
 			s.nameText.Text = p.DisplayName
-			s.plate.BackgroundColor3 = col:Lerp(BLACK, 0.55)
+			s.plate.BackgroundColor3 = col:Lerp(BLACK, 0.6)
 			s.ring.Color = col
 			s.ring.Material = M.Neon
 			if s.litId ~= c.id then
@@ -2842,7 +3319,6 @@ pickEvent.OnServerEvent:Connect(function(p, id)
 	setPick(p, id)
 end)
 
--- все участники выбрали
 local function allPicked()
 	local total = 0
 	for p in pairs(selRoles) do
@@ -2875,7 +3351,6 @@ local function resolveAssignments()
 	end
 	shuffle(freeSurvivors)
 	shuffle(freeKillers)
-	-- кто не выбрал — получает случайного свободного из СВОЕЙ таблицы
 	for p, role in pairs(selRoles) do
 		if p.Parent == Players and not assigned[p] then
 			local pool = role == "Killer" and freeKillers or freeSurvivors
@@ -2885,9 +3360,23 @@ local function resolveAssignments()
 	return assigned
 end
 
+-- Палач ушёл со сцены (в одиночном тесте с MIN_PLAYERS = 1 Палача нет изначально — это не ошибка)
+local selHadKiller = false
+local function killerOnStage()
+	if not selHadKiller then return true end
+	for p, role in pairs(selRoles) do
+		if role == "Killer" and p.Parent == Players then return true end
+	end
+	return false
+end
+
 local function runSelection()
 	resetPicks()
 	pickRoles()
+	selHadKiller = false
+	for _, role in pairs(selRoles) do
+		if role == "Killer" then selHadKiller = true end
+	end
 	if participantsLeft() < CONFIG.MIN_PLAYERS then return false end
 	for p, role in pairs(selRoles) do
 		p:SetAttribute("Role", role)
@@ -2896,10 +3385,10 @@ local function runSelection()
 	publishStage()
 	freezePlayers(true, selRoles)
 
-	setPhase("ToSelection")                      -- клиенты гасят экран
+	setPhase("ToSelection")
 	gameState:SetAttribute("TimeLeft", 0)
 	task.wait(CONFIG.FADE_TIME)
-	for p in pairs(selRoles) do restage(p) end   -- переезд на сцену под чёрным экраном
+	for p in pairs(selRoles) do restage(p) end
 	setPhase("Selection")
 
 	local endAt = os.clock() + CONFIG.SELECT_TIME
@@ -2908,9 +3397,13 @@ local function runSelection()
 	while true do
 		task.wait(0.1)
 		if participantsLeft() < CONFIG.MIN_PLAYERS then return false end
+		if not killerOnStage() then
+			announce("Палач покинул сцену. Новый отбор…", "warn")
+			return false
+		end
 		if not shortened and allPicked() then
 			shortened = true
-			endAt = math.min(endAt, os.clock() + CONFIG.SELECT_SHORT) -- все выбрали: остаётся 3 секунды
+			endAt = math.min(endAt, os.clock() + CONFIG.SELECT_SHORT)
 		end
 		local rem = math.max(0, math.ceil(endAt - os.clock()))
 		if rem ~= lastShown then
@@ -2932,7 +3425,7 @@ local function runSelection()
 	for _, it in ipairs(late) do setPick(it[1], it[2]) end
 	publishStage()
 	task.wait(CONFIG.REVEAL_TIME)
-	return participantsLeft() >= CONFIG.MIN_PLAYERS
+	return participantsLeft() >= CONFIG.MIN_PLAYERS and killerOnStage()
 end
 
 -- +время за убийство; клиент по BonusSeq плавно краснит часы
@@ -2946,15 +3439,13 @@ end
 ------------------------------------------------------------------------
 local function cleanupMatchState()
 	matchActive = false
-	if vanishSaved then setVanish(false) end
-	dashUntil, vanishUntil = 0, 0
+	if fx.vanishSaved then setVanish(false) end
+	fx.dashUntil, fx.vanishUntil, fx.stunUntil, fx.stunImmuneUntil = 0, 0, 0, 0
+	fx.bandage = {}
 	for _, c in ipairs(matchConns) do c:Disconnect() end
 	matchConns = {}
 	for p in pairs(stamina) do clearStamina(p) end
 	boostUntil = {}
-	clearTokens()
-	gameState:SetAttribute("Tokens", 0)
-	gameState:SetAttribute("TokensNeeded", 0)
 	gameState:SetAttribute("ExitName", "")
 end
 
@@ -2965,7 +3456,6 @@ local function runMatch(mapKey)
 	for p, id in pairs(assigned) do
 		if CHAR_BY_ID[id].killer then killerP = p end
 	end
-	-- выжившие в порядке мест на сцене (P1..P6)
 	local picked = {}
 	local seen = {}
 	for i, p in ipairs(stageOrder) do
@@ -2984,7 +3474,6 @@ local function runMatch(mapKey)
 		return false
 	end
 
-	if def.prepare then def.prepare(rng:NextInteger(1, 1000000)) end
 	currentDef = def
 	lastMap = mapKey
 	killer = killerP
@@ -2997,13 +3486,13 @@ local function runMatch(mapKey)
 	for _, p in ipairs(Players:GetPlayers()) do
 		p:SetAttribute("InMatch", false)
 		p:SetAttribute("Status", nil)
-		p:SetAttribute("Vote", nil)
 	end
 	survivorList, entryOf = {}, {}
+	local firstAbility = serverNow() + CONFIG.SURVIVOR_FIRST_ABILITY
 	for _, it in ipairs(picked) do
 		local e = {
 			player = it.player, userId = it.player.UserId, charId = it.char.id, port = it.port,
-			name = it.char.name, dname = it.player.DisplayName, char = it.char, status = "alive", tokens = 0,
+			name = it.char.name, dname = it.player.DisplayName, char = it.char, status = "alive",
 		}
 		table.insert(survivorList, e)
 		entryOf[it.player] = e
@@ -3011,6 +3500,8 @@ local function runMatch(mapKey)
 		it.player:SetAttribute("Status", "alive")
 		it.player:SetAttribute("Role", "Survivor")
 		it.player:SetAttribute("Port", it.port)
+		it.player:SetAttribute("AbilityReadyAt", firstAbility)
+		it.player:SetAttribute("AbilityUntil", 0)
 	end
 	if killer then
 		killer:SetAttribute("InMatch", true)
@@ -3018,28 +3509,21 @@ local function runMatch(mapKey)
 		killer:SetAttribute("Role", "Killer")
 		killer:SetAttribute("Port", nil)
 		killer:SetAttribute("Kills", 0)
-		killer:SetAttribute("AbilityReadyAt", serverNow() + CONFIG.ABILITY_FIRST_DELAY)
+		killer:SetAttribute("AbilityReadyAt", serverNow() + CONFIG.KILLER_FIRST_ABILITY)
 		killer:SetAttribute("AbilityUntil", 0)
+		killer:SetAttribute("StunnedUntil", 0)
 	end
 
 	-- таймер матча: 1 минута + 1 минута за каждого выжившего
 	local total = #survivorList
 	local matchTime = CONFIG.BASE_MATCH_TIME + CONFIG.TIME_PER_SURVIVOR * total
-	tokensGot = 0
-	tokensNeeded = math.clamp(CONFIG.TOKENS_BASE + CONFIG.TOKENS_PER_SURVIVOR * total, 1, CONFIG.TOKENS_MAX)
-	spawnTokens(def, tokensNeeded + CONFIG.TOKENS_EXTRA)
-	tokensNeeded = math.min(tokensNeeded, #activeTokens)
-	gameState:SetAttribute("Tokens", 0)
-	gameState:SetAttribute("TokensNeeded", tokensNeeded)
 	gameState:SetAttribute("MapKey", mapKey)
-
 	resetEscapes(def)
 	gameState:SetAttribute("EscapeOpen", false)
 	gameState:SetAttribute("ExitName", "")
 	gameState:SetAttribute("TimeLeft", matchTime)
 	publishRoster()
 
-	-- подгрузка мест спавна (экран в это время чёрный)
 	local streamList = {}
 	for _, e in ipairs(survivorList) do
 		e.spawn = def.survivorSpawns[rng:NextInteger(1, #def.survivorSpawns)]
@@ -3064,7 +3548,6 @@ local function runMatch(mapKey)
 			initStamina(e.player, false, mods)
 			watchDamage(e.player, hum)
 			table.insert(matchConns, hum.Died:Connect(function()
-				-- убийство выжившего добавляет время (не за уход из игры и не за истечение времени)
 				if e.status == "alive" and matchActive then
 					addMatchTime(CONFIG.KILL_BONUS_TIME)
 					kills += 1
@@ -3080,25 +3563,11 @@ local function runMatch(mapKey)
 
 	matchActive = true
 	matchEndAt = os.clock() + matchTime
-	setPhase("Match") -- клиент «включает» экран и показывает заставку уровня
+	setPhase("Match")
 
-	-- основной цикл матча
 	local lastShown = -1
 	local escapesOpen = false
 	local killerLeft = false
-	local function openExit(byTokens)
-		escapesOpen = true
-		local e = openRandomEscape(def)
-		gameState:SetAttribute("EscapeOpen", true)
-		gameState:SetAttribute("ExitPos", e.zone.Position)
-		gameState:SetAttribute("ExitName", e.label)
-		if byTokens then
-			matchEndAt = math.min(matchEndAt, os.clock() + CONFIG.TOKEN_OPEN_CAP)
-			announce("ЖЕТОНЫ ВСТАВЛЕНЫ! ОТКРЫТ ВЫХОД: " .. e.label, "warn")
-		else
-			announce("ОТКРЫТ ВЫХОД: " .. e.label .. ". Ищите зелёный столб света!", "warn")
-		end
-	end
 	while true do
 		task.wait(0.2)
 		local remaining = math.max(0, math.ceil(matchEndAt - os.clock()))
@@ -3106,9 +3575,13 @@ local function runMatch(mapKey)
 			lastShown = remaining
 			gameState:SetAttribute("TimeLeft", remaining)
 		end
-		checkTokens()
-		if not escapesOpen and (remaining <= CONFIG.ESCAPE_OPEN_AT or tokensGot >= tokensNeeded) then
-			openExit(tokensGot >= tokensNeeded and remaining > CONFIG.ESCAPE_OPEN_AT)
+		if not escapesOpen and remaining <= CONFIG.ESCAPE_OPEN_AT then
+			escapesOpen = true
+			local e = openRandomEscape(def) -- открывается ОДИН случайный выход
+			gameState:SetAttribute("EscapeOpen", true)
+			gameState:SetAttribute("ExitPos", e.zone.Position)
+			gameState:SetAttribute("ExitName", e.label)
+			announce("ОТКРЫТ ВЫХОД: " .. e.label, "warn")
 		end
 		checkEscapes(def)
 
@@ -3116,8 +3589,8 @@ local function runMatch(mapKey)
 			killerLeft = true
 			break
 		end
-		if countStatus("alive") == 0 then break end -- все погибли/сбежали
-		if remaining <= 0 then                        -- время вышло
+		if countStatus("alive") == 0 then break end
+		if remaining <= 0 then
 			announce("ВРЕМЯ ВЫШЛО!", "warn")
 			for _, e in ipairs(survivorList) do
 				if e.status == "alive" then
@@ -3147,7 +3620,7 @@ local function runMatch(mapKey)
 	end
 	local res = { o = outcome, esc = escapedN, total = total, map = mapKey, survivors = {} }
 	for _, e in ipairs(survivorList) do
-		table.insert(res.survivors, { n = e.dname, c = e.charId, s = e.status, t = e.tokens, p = e.port })
+		table.insert(res.survivors, { n = e.dname, c = e.charId, s = e.status, p = e.port })
 	end
 	if killer and killerChar then
 		res.killer = { n = killer.DisplayName, c = killerChar.id, k = kills }
@@ -3156,7 +3629,6 @@ local function runMatch(mapKey)
 	setPhase("Ending")
 	task.wait(CONFIG.ENDING_TIME)
 
-	-- плавный возврат: экран гаснет -> лобби -> включается
 	setPhase("Returning")
 	task.wait(CONFIG.FADE_TIME)
 	returnAllToLobby()
@@ -3183,12 +3655,10 @@ local function onPlayerAdded(p)
 	p.CharacterAdded:Connect(function(char)
 		local ph = gameState:GetAttribute("Phase")
 		if (ph == "Selection" or ph == "Starting") and selRoles[p] then
-			-- переродился во время выбора — вернуть на сцену
 			task.wait(0.3)
 			if pickOf[p] then applyLook(char, CHAR_BY_ID[pickOf[p]]) end
 			restage(p)
 		elseif matchActive and p == killer then
-			-- Палач возродился во время матча — вернуть на карту с оружием
 			task.wait(0.5)
 			setupKiller()
 		end
@@ -3204,6 +3674,7 @@ Players.PlayerRemoving:Connect(function(p)
 	end
 	stamina[p] = nil
 	boostUntil[p] = nil
+	fx.bandage[p] = nil
 	local picked = pickOf[p]
 	if picked then
 		picks[picked] = nil
@@ -3223,10 +3694,11 @@ end)
 
 ------------------------------------------------------------------------
 -- ГЛАВНЫЙ ЦИКЛ:
--- ожидание -> таймер лобби (голосование) -> сцена выбора -> матч -> итоги -> лобби
+-- ожидание -> таймер лобби -> сцена выбора -> матч -> итоги -> лобби
 ------------------------------------------------------------------------
 local function backToLobby()
 	setPhase("Waiting")
+	gameState:SetAttribute("TimeLeft", 0)
 	freezePlayers(false)
 	returnAllToLobby()
 	resetPicks()
@@ -3235,17 +3707,20 @@ local function backToLobby()
 end
 
 task.spawn(function()
+	local quickRestart = false -- после сорванного отбора лобби ждёт меньше
 	while true do
 		setPhase("Waiting")
 		gameState:SetAttribute("TimeLeft", 0)
 		while #Players:GetPlayers() < CONFIG.MIN_PLAYERS do
 			task.wait(1)
 		end
-		local mapKey = runCountdown()
+		local mapKey = runCountdown(quickRestart and 10 or nil)
+		quickRestart = false
 		if mapKey then
 			local okSel, selDone = pcall(runSelection)
 			if okSel and selDone then
-				setPhase("Starting") -- клиент гасит экран
+				setPhase("Starting")
+				gameState:SetAttribute("MapKey", mapKey)
 				gameState:SetAttribute("TimeLeft", 0)
 				task.wait(CONFIG.FADE_TIME)
 				local ok, res = pcall(runMatch, mapKey)
@@ -3263,6 +3738,7 @@ task.spawn(function()
 			else
 				if not okSel then warn("[P2D] Ошибка выбора: " .. tostring(selDone)) end
 				backToLobby()
+				quickRestart = true
 			end
 		end
 		task.wait(1)
