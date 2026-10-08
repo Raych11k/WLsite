@@ -1772,6 +1772,23 @@ do
 			reserve(def, p[1] + 2, p[2], 6)
 		end
 
+		-- станки и котёл посреди цеха: крупные укрытия, вокруг которых можно петлять
+		local function machine(cx, cz, w, d, h, col)
+			B("Machine", cx - w / 2, cx + w / 2, 0, h, cz - d / 2, cz + d / 2, col, M.Metal)
+			B("MachineTop", cx - w / 2 + 1, cx + w / 2 - 1, h, h + 2, cz - d / 2 + 1, cz + d / 2 - 1, col:Lerp(BLACK, 0.3), M.Metal)
+			B("MachineStripe", cx - w / 2 - 0.05, cx + w / 2 + 0.05, 1, 1.6, cz - d / 2 - 0.05, cz + d / 2 + 0.05, YEL, M.SmoothPlastic, FLAT)
+			local lamp = B("MachineLamp", cx - 0.6, cx + 0.6, h + 2, h + 3, cz - 0.6, cz + 0.6, REDL, M.Neon, NOCOL)
+			tag(lamp, "P2D_Blink", { Rate = 0.8 })
+			reserve(def, cx, cz, math.max(w, d) / 2 + 3)
+		end
+		machine(-58, -14, 12, 9, 7, Color3.fromRGB(70, 86, 74))
+		machine(-74, 40, 9, 12, 6, Color3.fromRGB(86, 74, 60))
+		machine(58, -62, 10, 10, 6, Color3.fromRGB(74, 70, 86))
+		cyl(m, "Boiler", 14, 11, o + Vector3.new(28, 7, 26), Color3.fromRGB(96, 80, 64), M.CorrodedMetal)
+		cyl(m, "BoilerCap", 1, 12, o + Vector3.new(28, 14.5, 26), Color3.fromRGB(60, 50, 40), M.Metal)
+		beam(m, "BoilerPipe", o + Vector3.new(28, 15, 26), o + Vector3.new(28, H - 1, 26), 1.4, Color3.fromRGB(80, 60, 40), M.Metal)
+		reserve(def, 28, 26, 9)
+
 		-- освещение: подвесные лампы, аварийные огни, прожекторы
 		for _, x in ipairs({ -80, -20, 40, 90 }) do
 			for _, z in ipairs({ -70, -20, 30, 80 }) do
