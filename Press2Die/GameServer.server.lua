@@ -43,29 +43,37 @@ local CONFIG = {
 	REVEAL_TIME = 2,          -- пауза «все на сцене» перед матчем
 	KILL_BONUS_TIME = 20,     -- +секунд к матчу за убийство выжившего
 	FADE_TIME = 1.2,          -- пауза под затемнение между этапами
-	SURVIVOR_HEALTH = 100,
-	SURVIVOR_SPEED = 16,
-	KILLER_SPEED = 18,
+	SURVIVOR_SPEED = 14,      -- шаг (снижен, чтобы бег и ускорения ощущались отчётливо)
+	KILLER_SPEED = 16,
 	SURVIVOR_SPRINT_SPEED = 23,
 	KILLER_SPRINT_SPEED = 25,
-	STAMINA_MAX_SURVIVOR = 100,
 	STAMINA_MAX_KILLER = 125,
 	STAMINA_DRAIN = 20,
 	STAMINA_REGEN = 14,
 	STAMINA_REGEN_DELAY = 1.5,
 	STAMINA_RECOVER_FRACTION = 0.25,
-	HIT_BOOST_MULT = 1.35,    -- ускорение после удара / от «Бумбокса» / «Дымовухи»
+	HIT_BOOST_MULT = 1.35,    -- ускорение после удара Палача
 	HIT_BOOST_TIME = 3,
-	KILLER_DAMAGE = 34,       -- 3 удара убивают обычного выжившего
+	KILLER_DAMAGE = 34,       -- 3 удара убивают выжившего со 100 здоровья
 	KILLER_RANGE = 8,
 	KILLER_COOLDOWN = 1.2,
 	DASH_SPEED = 62,          -- скорость Палача во время «Рывка»
-	KILLER_FIRST_ABILITY = 8, -- способность готова через N секунд после старта
+	KILLER_FIRST_ABILITY = 8, -- навык Палача готов через N секунд после старта
 	SURVIVOR_FIRST_ABILITY = 12,
 	STUN_IMMUNITY = 6,        -- после оглушения Палач N секунд не оглушается снова
-	FLASH_RANGE = 22,         -- «Вспышка» Алекса
-	PUNCH_RANGE = 8,          -- «Апперкот» Айши
-	SUPPORT_RADIUS = 18,      -- радиус «Аптечки» и «Бумбокса»
+	-- навыки выживших (подробности — в таблице CHARACTERS)
+	PUNCH_RANGE = 7, PUNCH_STUN = 2,                       -- Алекс: «Удар»
+	COUNTER_STUN = 3,                                      -- Алекс: «Контр-удар»
+	ADRENALINE_MULT = 1.3, ADRENALINE_WINDED = 1,          -- Оскар: «Адреналин» (+30% и 1 с одышки)
+	WINDED_MULT = 0.6,
+	HEAL_AMOUNT = 50, HEAL_RADIUS = 8,                     -- Лилиан: «Лечение» (союзник жмёт F рядом с ней)
+	SELFHEAL_AMOUNT = 35,                                  -- Лилиан: «Самолечение»
+	STATION_RADIUS = 9, STATION_HEAL = 5, STATION_SPEED = 1.2, -- Грег: станция лечения (ед./с) или ускорения
+	TRIPWIRE_SLOW = 0.6, TRIPWIRE_TIME = 1.1, TRIPWIRE_MAX = 2, TRIPWIRE_LIFE = 90, -- Грег: «Растяжка»
+	BAT_RANGE = 8, BAT_WINDUP = 0.45, BAT_STUN = 1.5, BAT_SLOW = 0.35, BAT_SLOW_TIME = 2, -- Айша: «Бита»
+	FLASH_RANGE = 22, FLASH_BLIND = 1.5,                   -- Айша: «Вспышка»
+	MANA_REGEN = 1.5, TK_RANGE = 45, TK_SLOW_TIME = 3,     -- Феликс: мана (макс. в CHARACTERS) и «Телекинез»
+	SHIELD_STUN = 2, SHIELD_PUSH = 75, SHIELD_PUSH_RADIUS = 12, -- Феликс: «Силовой щит»
 	LOBBY_POS = Vector3.new(-3000, 0, 0),
 	STAGE_POS = Vector3.new(0, 900, -3000),
 }
@@ -112,6 +120,15 @@ do
 	atm.Haze = 2
 end
 Players.RespawnTime = 3
+-- без прыжков и без встроенного shift-lock: Shift — это бег, свой shift-lock на Ctrl делает клиент
+do
+	local sp = game:GetService("StarterPlayer")
+	sp.CharacterWalkSpeed = CONFIG.SURVIVOR_SPEED
+	sp.CharacterUseJumpPower = true
+	sp.CharacterJumpPower = 0
+	sp.CharacterJumpHeight = 0
+	sp.EnableMouseLockOption = false
+end
 
 -- цвета материалов ландшафта (общие для всех карт, поэтому у каждой карты свои материалы)
 if Terrain then
@@ -578,7 +595,7 @@ end
 
 ------------------------------------------------------------------------
 -- ПЕРСОНАЖИ: 6 выживших (3 роли по 2) + 3 Палача. Один персонаж = один игрок.
--- Пипсы 1..5 (3 = базовое значение). У выживших hp/speed/stamina, у Палачей power/speed/stamina.
+-- У выживших точные hp/stamina (у Феликса ещё мана) и два навыка; у Палачей пипсы 1..5 power/speed/stamina и один навык.
 ------------------------------------------------------------------------
 local ROLES = {
 	stun = { name = "СТАННЕР", color = { 255, 212, 40 } },
@@ -588,43 +605,68 @@ local ROLES = {
 }
 gameState:SetAttribute("Roles", HttpService:JSONEncode(ROLES))
 
+-- skills[1] — клавиша Q, skills[2] — клавиша E. cd — перезарядка, dur — длительность (для полосы активности в HUD).
 local CHARACTERS = {
-	{ id = "alex", name = "Алекс", group = "stun", role = "Фотограф-тинейджер", killer = false, color = { 60, 130, 240 },
-		hp = 3, speed = 3, stamina = 3,
-		desc = "Не расстаётся с «Полароидом». Вспышка в лицо сбивает Палача с толку.",
-		ability = { id = "flash", name = "ВСПЫШКА", cd = 30, dur = 0, text = "Ослепляет Палача перед тобой (до 22 м) на 2.5 с" } },
-	{ id = "aisha", name = "Айша", f = true, group = "stun", role = "Аркадная бойчиха", killer = false, color = { 240, 120, 30 },
-		hp = 2, speed = 5, stamina = 3,
-		desc = "Чемпионка файтингов с района. Подпусти Палача вплотную — и апперкот.",
-		ability = { id = "punch", name = "АППЕРКОТ", cd = 35, dur = 0, text = "Оглушает Палача вплотную (до 8 м) на 3.5 с" } },
-	{ id = "lilian", name = "Лилиан", f = true, group = "support", role = "Полевой медик", killer = false, color = { 235, 110, 180 },
-		hp = 2, speed = 4, stamina = 4,
-		desc = "Таскает аптечку больше себя. Держит команду на ногах.",
-		ability = { id = "heal", name = "АПТЕЧКА", cd = 40, dur = 0, text = "Лечит союзников рядом на 35, себя — на 15" } },
-	{ id = "greg", name = "Грег", group = "support", role = "Диджей с бумбоксом", killer = false, color = { 70, 170, 90 },
-		hp = 4, speed = 3, stamina = 2,
-		desc = "Его бумбокс поднимет на ноги кого угодно. Почти.",
-		ability = { id = "boombox", name = "БУМБОКС", cd = 35, dur = 4, text = "Союзникам рядом — полная выносливость и ускорение" } },
-	{ id = "oscar", name = "Оскар", group = "lone", role = "Шахтёр-громила", killer = false, color = { 150, 100, 60 },
-		hp = 5, speed = 2, stamina = 3,
-		desc = "Никому не доверяет. Залатает себя сам и пойдёт дальше.",
-		ability = { id = "bandage", name = "ПЕРЕВЯЗКА", cd = 45, dur = 3, text = "Восстанавливает себе 45 здоровья за 3 с" } },
-	{ id = "felix", name = "Феликс", group = "lone", role = "Сталкер-параноик", killer = false, color = { 120, 130, 70 },
-		hp = 3, speed = 3, stamina = 4,
-		desc = "Противогаз, рюкзак и дымовуха на любой случай.",
-		ability = { id = "smoke", name = "ДЫМОВУХА", cd = 35, dur = 3, text = "Облако дыма и рывок на 3 с" } },
+	{ id = "alex", name = "Алекс", group = "stun", role = "Уличный боец", killer = false, color = { 214, 60, 48 },
+		hp = 100, stamina = 100,
+		desc = "Повязка на лбу, бинты на кулаках. Серьёзный — встаёт между Палачом и командой.",
+		skills = {
+			{ id = "punch", name = "УДАР", key = "Q", cd = 25, dur = 0, text = "Удар в упор (до 7 м) оглушает Палача на 2 с" },
+			{ id = "counter", name = "КОНТР-УДАР", key = "E", cd = 35, dur = 2.5,
+				text = "2.5 с в стойке: удар Палача отражён, он оглушён на 3 с. Бежать нельзя, видна белая обводка" },
+		} },
+	{ id = "aisha", name = "Айша", f = true, group = "stun", role = "Неформалка", killer = false, color = { 255, 110, 190 },
+		hp = 100, stamina = 100,
+		desc = "Бодрая и задорная, вечно надувает пузырь из жвачки. Никого не бросит в беде.",
+		skills = {
+			{ id = "bat", name = "БИТА", key = "Q", cd = 20, dur = 0,
+				text = "Замах и удар: в лицо — бита ломается, Палач оглушён на 1.5 с; в корпус — замедление" },
+			{ id = "flash", name = "ВСПЫШКА", key = "E", cd = 30, dur = 0, text = "Вспышка камеры ослепляет Палача, смотрящего на тебя, на 1.5 с" },
+		} },
+	{ id = "lilian", name = "Лилиан", f = true, group = "support", role = "Медик", killer = false, color = { 90, 210, 190 },
+		hp = 80, stamina = 100,
+		desc = "Добрая и неравнодушная. Медицинская форма, аптечка всегда при себе.",
+		skills = {
+			{ id = "heal", name = "ЛЕЧЕНИЕ", key = "Q", cd = 30, dur = 10,
+				text = "Встаёт в позу и предлагает лечение: выживший рядом жмёт F и получает +50. Урон отменяет" },
+			{ id = "selfheal", name = "САМОЛЕЧЕНИЕ", key = "E", cd = 40, dur = 4, text = "4 с на месте, восстанавливает 35 здоровья. Урон отменяет" },
+		} },
+	{ id = "greg", name = "Грег", group = "support", role = "Инженер", killer = false, color = { 214, 132, 40 },
+		hp = 90, stamina = 100,
+		desc = "Безнравственный и потрёпанный жизнью инженер. Зато руки золотые.",
+		skills = {
+			{ id = "station", name = "СТАНЦИЯ", key = "Q", cd = 40, dur = 20,
+				text = "ЛКМ — станция лечения, ПКМ — станция ускорения (20 с, радиус 9 м)" },
+			{ id = "tripwire", name = "РАСТЯЖКА", key = "E", cd = 20, dur = 0, text = "Ставит растяжку: задевший её Палач резко замедлен на ~1 с" },
+		} },
+	{ id = "oscar", name = "Оскар", group = "lone", role = "Тихоня", killer = false, color = { 96, 98, 128 },
+		hp = 100, stamina = 100,
+		desc = "Нерешительный, с тяжёлым семейным прошлым. Тёмная одежда, взгляд в пол.",
+		skills = {
+			{ id = "godeye", name = "БОЖИЙ ГЛАЗ", key = "Q", cd = 35, dur = 5, text = "5 с видит всех выживших и Палача сквозь стены. Бежать нельзя" },
+			{ id = "adrenaline", name = "АДРЕНАЛИН", key = "E", cd = 30, dur = 6, text = "+30% к скорости на 6 с, затем 1 с одышки" },
+		} },
+	{ id = "felix", name = "Феликс", group = "lone", role = "Маг", killer = false, color = { 70, 110, 240 },
+		hp = 100, stamina = 100, mana = 50,
+		desc = "Первым попал в приставку. Похож на мага в синих и тёмных тонах. Копит ману.",
+		skills = {
+			{ id = "telekinesis", name = "ТЕЛЕКИНЕЗ", key = "Q", cd = 6, dur = 0,
+				text = "Сгусток силы: при попадании замедляет Палача на столько %, сколько сейчас маны. Тратит всю ману" },
+			{ id = "shield", name = "СИЛОВОЙ ЩИТ", key = "E", cd = 35, dur = 3,
+				text = "До 3 с: удар Палача отражён, он оглушён. Бежать нельзя. E ещё раз — сбросить щит и оттолкнуть Палача" },
+		} },
 	{ id = "executioner", name = "Палач", group = "killer", role = "Мясник с мешком", killer = true, color = { 200, 30, 30 },
 		power = 4, speed = 3, stamina = 4,
 		desc = "Мешок на голове, тесак в руке. Рывком сокращает дистанцию.",
-		ability = { id = "dash", name = "РЫВОК", cd = 14, dur = 0.55, text = "Мгновенный рывок вперёд" } },
+		skills = { { id = "dash", name = "РЫВОК", key = "Q", cd = 14, dur = 0.55, text = "Мгновенный рывок вперёд" } } },
 	{ id = "glitch", name = "Сбой", group = "killer", role = "Человек-телевизор", killer = true, color = { 70, 210, 235 },
 		power = 3, speed = 3, stamina = 4,
 		desc = "Экраны идут помехами — и Сбой видит всех сквозь стены.",
-		ability = { id = "reveal", name = "ПОМЕХИ", cd = 24, dur = 5, text = "5 с видит всех выживших сквозь стены" } },
+		skills = { { id = "reveal", name = "ПОМЕХИ", key = "Q", cd = 24, dur = 5, text = "5 с видит всех выживших сквозь стены" } } },
 	{ id = "binky", name = "Бинки", group = "killer", role = "Талисман-маскот", killer = true, color = { 150, 80, 220 },
 		power = 3, speed = 4, stamina = 3,
 		desc = "Улыбается с коробки от приставки. Исчезает и появляется за спиной.",
-		ability = { id = "vanish", name = "ПРЯТКИ", cd = 26, dur = 6, text = "6 с невидимости, удар раскрывает" } },
+		skills = { { id = "vanish", name = "ПРЯТКИ", key = "Q", cd = 26, dur = 6, text = "6 с невидимости, удар раскрывает" } } },
 }
 local CHAR_BY_ID = {}
 for _, c in ipairs(CHARACTERS) do CHAR_BY_ID[c.id] = c end
@@ -682,158 +724,192 @@ do
 	local LONE = rgb(ROLES.lone.color)
 	local function C(r, g, b) return Color3.fromRGB(r, g, b) end
 
-	COSTUME.alex = { -- фотограф: колючие волосы как у героев платформеров, огромные кеды, «Полароид»
-		chest = C(40, 110, 230), chestMul = V(1.25, 1.1, 1.3), belly = C(40, 50, 90), bellyMul = V(1.2, 1.1, 1.25),
-		arm = C(40, 110, 230), armMul = 1.2, leg = C(40, 50, 90), legMul = 1.12, glove = C(240, 240, 240), gloveMul = 1.5,
-		shoe = C(230, 40, 40), shoeMul = 1.35, accent = STUN,
+	COSTUME.alex = { -- уличный боец: красная повязка с хвостами, бинты на кулаках, широкие плечи, пояс
+		chest = C(36, 36, 42), chestMul = V(1.45, 1.15, 1.3), belly = C(60, 60, 68), bellyMul = V(1.2, 1.1, 1.2),
+		arm = SKIN, armMul = 1.35, leg = C(60, 60, 68), legMul = 1.15, glove = C(238, 232, 214), gloveMul = 1.9,
+		shoe = C(200, 40, 36), shoeMul = 1.3, accent = STUN,
 		head = function(add, u)
-			local H = 1.55 * u
+			local H = 1.5 * u
 			local y = (H - u) * 0.4
 			add("BigHead", V(H, H, H), CF(0, y, 0), SKIN, M.SmoothPlastic, BALL)
-			for i, a in ipairs({ -50, -25, 0, 25, 50 }) do
-				local pitch = math.rad(30 + (i % 2) * 18)
-				add("Spike", V(0.32 * H, 0.32 * H, 0.95 * H),
-					CF(0, y + 0.25 * H, 0) * CFrame.Angles(0, math.rad(a), 0) * CFrame.Angles(pitch, 0, 0) * CF(0, 0, 0.42 * H), C(255, 140, 30))
+			add("Hair", V(1.04 * H, 0.62 * H, 1.04 * H), CF(0, y + 0.3 * H, 0.04 * H), C(34, 26, 22), M.SmoothPlastic, BALL)
+			for i, a in ipairs({ -35, 0, 35 }) do
+				add("HairSpike", V(0.2 * H, 0.2 * H, 0.5 * H), CF(0, y + 0.42 * H, 0.05 * H) * CFrame.Angles(math.rad(-30 - i * 4), math.rad(a), 0) * CF(0, 0, 0.3 * H), C(34, 26, 22))
 			end
-			add("Bang", V(0.5 * H, 0.18 * H, 0.35 * H), CF(0, y + 0.4 * H, -0.3 * H) * CFrame.Angles(math.rad(-20), 0, 0), C(255, 140, 30))
-			eyes(add, H, y + 0.05 * H)
-			add("Mouth", V(0.22 * H, 0.05 * H, 0.05 * H), CF(0, y - 0.22 * H, -0.47 * H), C(90, 30, 30))
-		end,
-		extra = function(add, s, accent)
-			add("Camera", V(s.X * 0.5, s.Y * 0.36, 0.5), CF(0, s.Y * 0.08, -s.Z * 0.65 - 0.25), C(44, 44, 48))
-			add("Lens", V(0.3, 0.55, 0.55), CF(0, s.Y * 0.06, -s.Z * 0.65 - 0.55) * ALONG_Z, C(10, 10, 14), M.SmoothPlastic, CYL)
-			add("Flash", V(0.35, 0.2, 0.1), CF(-s.X * 0.17, s.Y * 0.2, -s.Z * 0.65 - 0.52), accent, M.Neon)
-			add("Strap", V(0.18, s.Y * 1.3, 0.1), CF(0, s.Y * 0.1, -s.Z * 0.66) * CFrame.Angles(0, 0, math.rad(40)), C(20, 20, 24))
-		end,
-	}
-	COSTUME.aisha = { -- бойчиха из файтинга: гигантские перчатки, высокий хвост, повязка с лентами
-		chest = C(240, 120, 30), chestMul = V(1.2, 1.05, 1.2), belly = C(28, 28, 30), bellyMul = V(1.25, 1.15, 1.25),
-		arm = C(240, 120, 30), armMul = 1.1, leg = C(235, 235, 235), legMul = 1.15, glove = C(220, 30, 30), gloveMul = 2.3,
-		shoe = C(30, 30, 30), shoeMul = 1.2, accent = STUN,
-		head = function(add, u)
-			local H = 1.45 * u
-			local y = (H - u) * 0.4
-			local skin = C(176, 124, 92)
-			add("BigHead", V(H, H, H), CF(0, y, 0), skin, M.SmoothPlastic, BALL)
-			add("Headband", V(0.16 * H, 1.04 * H, 1.04 * H), CF(0, y + 0.14 * H, 0) * VERT, C(220, 30, 30), M.SmoothPlastic, CYL)
+			add("Headband", V(0.16 * H, 1.05 * H, 1.05 * H), CF(0, y + 0.16 * H, 0) * VERT, C(220, 30, 30), M.SmoothPlastic, CYL)
 			for _, s in ipairs({ -1, 1 }) do
-				add("BandTail", V(0.1 * H, 0.08 * H, 0.9 * H), CF(s * 0.12 * H, y + 0.05 * H, 0.75 * H) * CFrame.Angles(math.rad(25), math.rad(s * 12), 0), C(220, 30, 30))
-				add("Brow", V(0.24 * H, 0.06 * H, 0.06 * H), CF(s * 0.2 * H, y + 0.24 * H, -0.45 * H) * CFrame.Angles(0, 0, math.rad(s * 18)), C(30, 20, 18))
+				add("BandTail", V(0.1 * H, 0.09 * H, 1.0 * H), CF(s * 0.12 * H, y + 0.08 * H, 0.8 * H) * CFrame.Angles(math.rad(20), math.rad(s * 14), 0), C(220, 30, 30))
+				-- серьёзный взгляд: брови домиком вниз
+				add("Brow", V(0.28 * H, 0.07 * H, 0.06 * H), CF(s * 0.2 * H, y + 0.2 * H, -0.47 * H) * CFrame.Angles(0, 0, math.rad(s * 20)), C(30, 22, 18))
 			end
-			for i, d in ipairs({ 0.55, 0.47, 0.4, 0.32 }) do
-				add("Ponytail", V(d * H, d * H, d * H), CF(0, y + (0.45 + i * 0.22) * H, (0.25 + i * 0.16) * H), C(36, 22, 18), M.SmoothPlastic, BALL)
-			end
-			eyes(add, H, y + 0.04 * H)
-			add("Mouth", V(0.2 * H, 0.05 * H, 0.05 * H), CF(0, y - 0.22 * H, -0.47 * H), C(90, 30, 30))
+			eyes(add, H, y + 0.04 * H, nil, nil, 0.19)
+			add("Mouth", V(0.24 * H, 0.04 * H, 0.05 * H), CF(0, y - 0.24 * H, -0.47 * H), C(90, 40, 36))
+			add("Plaster", V(0.2 * H, 0.08 * H, 0.05 * H), CF(0.26 * H, y - 0.1 * H, -0.45 * H) * CFrame.Angles(0, 0, math.rad(-20)), C(238, 232, 214))
 		end,
 		extra = function(add, s, accent)
-			for _, x in ipairs({ -0.25, 0.25 }) do
-				add("BeltTail", V(0.3, s.Y * 0.6, 0.12), CF(x * s.X, -s.Y * 0.75, -s.Z * 0.62), C(28, 28, 30))
+			add("Belt", V(s.X * 1.48, 0.35, s.Z * 1.34), CF(0, -s.Y * 0.48, 0), C(200, 30, 30))
+			for _, x in ipairs({ -0.12, 0.12 }) do
+				add("BeltTail", V(0.22, s.Y * 0.5, 0.1), CF(x * s.X, -s.Y * 0.78, -s.Z * 0.68) * CFrame.Angles(0, 0, math.rad(x * 60)), C(200, 30, 30))
 			end
-			add("Badge", V(0.5, 0.5, 0.1), CF(-s.X * 0.25, s.Y * 0.2, -s.Z * 0.62), accent, M.Neon)
+			add("Badge", V(0.5, 0.5, 0.1), CF(-s.X * 0.3, s.Y * 0.2, -s.Z * 0.66), accent, M.Neon)
 		end,
 	}
-	COSTUME.lilian = { -- медик: огромный рюкзак-аптечка с крестом, шапочка, розовые пучки
-		chest = C(238, 238, 244), chestMul = V(1.2, 1.15, 1.25), belly = C(238, 238, 244), bellyMul = V(1.3, 1.45, 1.3),
-		arm = C(230, 110, 180), armMul = 1.1, leg = C(200, 90, 160), legMul = 1.0, glove = C(90, 220, 130), gloveMul = 1.4,
-		shoe = C(230, 110, 180), shoeMul = 1.25, accent = SUPPORT,
+	COSTUME.aisha = { -- неформалка: розовые хвостики, джинсовка с нашивками, бита за спиной, пузырь жвачки
+		chest = C(70, 100, 160), chestMul = V(1.25, 1.08, 1.25), belly = C(30, 30, 36), bellyMul = V(1.2, 1.1, 1.2),
+		arm = C(70, 100, 160), armMul = 1.15, leg = C(34, 34, 40), legMul = 1.1, glove = C(205, 150, 120), gloveMul = 1.3,
+		shoe = C(250, 250, 250), shoeMul = 1.45, accent = STUN,
+		head = function(add, u)
+			local H = 1.5 * u
+			local y = (H - u) * 0.4
+			local pink, violet = C(255, 110, 190), C(170, 90, 230)
+			add("BackHair", V(1.06 * H, 1.0 * H, 1.0 * H), CF(0, y + 0.06 * H, 0.08 * H), pink, M.SmoothPlastic, BALL)
+			add("BigHead", V(H, H, H), CF(0, y, -0.03 * H), C(205, 150, 120), M.SmoothPlastic, BALL)
+			add("Bangs", V(0.95 * H, 0.26 * H, 0.5 * H), CF(0.06 * H, y + 0.36 * H, -0.24 * H) * CFrame.Angles(math.rad(-18), 0, math.rad(-12)), pink)
+			for _, s in ipairs({ -1, 1 }) do
+				add("Pigtail", V(0.42 * H, 0.42 * H, 0.42 * H), CF(s * 0.55 * H, y + 0.38 * H, 0.1 * H), violet, M.SmoothPlastic, BALL)
+				add("PigtailTip", V(0.3 * H, 0.3 * H, 0.3 * H), CF(s * 0.72 * H, y + 0.16 * H, 0.14 * H), pink, M.SmoothPlastic, BALL)
+			end
+			eyes(add, H, y + 0.04 * H, nil, C(140, 60, 160))
+			add("Blush", V(0.14 * H, 0.06 * H, 0.04 * H), CF(-0.28 * H, y - 0.12 * H, -0.44 * H), C(255, 130, 160))
+			add("Blush", V(0.14 * H, 0.06 * H, 0.04 * H), CF(0.28 * H, y - 0.12 * H, -0.44 * H), C(255, 130, 160))
+			add("Bubble", V(0.36 * H, 0.36 * H, 0.36 * H), CF(0.02 * H, y - 0.24 * H, -0.62 * H), C(255, 150, 210), M.SmoothPlastic, BALL)
+		end,
+		extra = function(add, s, accent)
+			add("Bat", V(0.4, s.Y * 2.2, 0.4), CF(0, s.Y * 0.3, s.Z * 0.7) * CFrame.Angles(0, 0, math.rad(35)), C(176, 124, 72), M.Wood)
+			add("BatTape", V(0.44, 0.6, 0.44), CF(-s.X * 0.5, -s.Y * 0.35, s.Z * 0.7) * CFrame.Angles(0, 0, math.rad(35)), C(30, 30, 30))
+			add("Camera", V(s.X * 0.4, s.Y * 0.28, 0.4), CF(s.X * 0.15, -s.Y * 0.15, -s.Z * 0.68), C(40, 40, 46))
+			add("Lens", V(0.3, 0.5, 0.5), CF(s.X * 0.15, -s.Y * 0.15, -s.Z * 0.68 - 0.3) * ALONG_Z, C(10, 10, 14), M.SmoothPlastic, CYL)
+			add("Strap", V(0.15, s.Y * 1.2, 0.1), CF(-s.X * 0.1, s.Y * 0.15, -s.Z * 0.66) * CFrame.Angles(0, 0, math.rad(-35)), C(250, 110, 190))
+			add("Patch", V(0.45, 0.45, 0.1), CF(-s.X * 0.32, s.Y * 0.22, -s.Z * 0.66), C(255, 110, 190))
+			add("Badge", V(0.4, 0.4, 0.1), CF(s.X * 0.32, s.Y * 0.25, -s.Z * 0.66), accent, M.Neon)
+		end,
+	}
+	COSTUME.lilian = { -- медик: мятный медицинский костюм, шапочка с крестом, пучок, огромная аптечка за спиной
+		chest = C(110, 220, 200), chestMul = V(1.2, 1.12, 1.25), belly = C(110, 220, 200), bellyMul = V(1.3, 1.4, 1.3),
+		arm = C(110, 220, 200), armMul = 1.1, leg = C(80, 190, 170), legMul = 1.0, glove = C(245, 245, 250), gloveMul = 1.35,
+		shoe = C(245, 245, 250), shoeMul = 1.25, accent = SUPPORT,
 		head = function(add, u)
 			local H = 1.45 * u
 			local y = (H - u) * 0.4
-			add("BackHair", V(1.02 * H, 1.02 * H, 1.02 * H), CF(0, y + 0.02 * H, 0.1 * H), C(240, 90, 170), M.SmoothPlastic, BALL)
+			local hair = C(120, 70, 40)
+			add("BackHair", V(1.03 * H, 1.03 * H, 1.03 * H), CF(0, y + 0.03 * H, 0.1 * H), hair, M.SmoothPlastic, BALL)
 			add("BigHead", V(H, H, H), CF(0, y, -0.02 * H), SKIN, M.SmoothPlastic, BALL)
-			for _, s in ipairs({ -1, 1 }) do
-				add("Bun", V(0.5 * H, 0.5 * H, 0.5 * H), CF(s * 0.46 * H, y + 0.36 * H, 0.05 * H), C(240, 90, 170), M.SmoothPlastic, BALL)
-			end
-			add("Cap", V(0.62 * H, 0.3 * H, 0.42 * H), CF(0, y + 0.52 * H, -0.08 * H), C(250, 250, 250))
-			add("CapCrossH", V(0.26 * H, 0.08 * H, 0.04 * H), CF(0, y + 0.52 * H, -0.3 * H), SUPPORT, M.Neon)
-			add("CapCrossV", V(0.08 * H, 0.26 * H, 0.04 * H), CF(0, y + 0.52 * H, -0.3 * H), SUPPORT, M.Neon)
+			add("Bun", V(0.55 * H, 0.55 * H, 0.55 * H), CF(0, y + 0.42 * H, 0.42 * H), hair, M.SmoothPlastic, BALL)
+			add("Cap", V(0.7 * H, 0.32 * H, 0.46 * H), CF(0, y + 0.52 * H, -0.08 * H), C(250, 250, 250))
+			add("CapCrossH", V(0.26 * H, 0.08 * H, 0.04 * H), CF(0, y + 0.52 * H, -0.32 * H), C(220, 40, 40), M.Neon)
+			add("CapCrossV", V(0.08 * H, 0.26 * H, 0.04 * H), CF(0, y + 0.52 * H, -0.32 * H), C(220, 40, 40), M.Neon)
 			eyes(add, H, y + 0.04 * H, nil, C(40, 120, 70))
-			add("Mouth", V(0.18 * H, 0.05 * H, 0.05 * H), CF(0, y - 0.22 * H, -0.47 * H), C(180, 60, 90))
+			for _, s in ipairs({ -1, 1 }) do
+				add("Blush", V(0.13 * H, 0.06 * H, 0.04 * H), CF(s * 0.28 * H, y - 0.12 * H, -0.44 * H), C(255, 150, 160))
+			end
+			add("Smile", V(0.2 * H, 0.05 * H, 0.05 * H), CF(0, y - 0.22 * H, -0.47 * H), C(180, 60, 90))
 		end,
 		extra = function(add, s, accent)
-			add("Medpack", V(s.X * 1.05, s.Y * 1.35, 1.1), CF(0, s.Y * 0.15, s.Z * 0.6 + 0.6), C(250, 250, 250))
-			add("CrossH", V(s.X * 0.6, 0.35, 0.1), CF(0, s.Y * 0.2, s.Z * 0.6 + 1.17), accent, M.Neon)
-			add("CrossV", V(0.35, s.X * 0.6, 0.1), CF(0, s.Y * 0.2, s.Z * 0.6 + 1.17), accent, M.Neon)
-			for _, x in ipairs({ -0.3, 0.3 }) do
-				add("Strap", V(0.2, s.Y * 1.05, 0.1), CF(x * s.X, s.Y * 0.05, -s.Z * 0.64), C(200, 200, 210))
-			end
+			add("Medpack", V(s.X * 1.1, s.Y * 1.35, 1.1), CF(0, s.Y * 0.15, s.Z * 0.6 + 0.6), C(250, 250, 250))
+			add("CrossH", V(s.X * 0.6, 0.35, 0.1), CF(0, s.Y * 0.2, s.Z * 0.6 + 1.17), C(220, 40, 40), M.Neon)
+			add("CrossV", V(0.35, s.X * 0.6, 0.1), CF(0, s.Y * 0.2, s.Z * 0.6 + 1.17), C(220, 40, 40), M.Neon)
+			add("Stethoscope", V(s.X * 0.7, 0.14, 0.12), CF(0, s.Y * 0.38, -s.Z * 0.64), C(60, 60, 66))
+			add("Pocket", V(0.6, 0.5, 0.1), CF(s.X * 0.28, s.Y * 0.12, -s.Z * 0.64), C(90, 200, 180))
+			add("Badge", V(0.4, 0.4, 0.1), CF(-s.X * 0.28, s.Y * 0.12, -s.Z * 0.64), accent, M.Neon)
 		end,
 	}
-	COSTUME.greg = { -- диджей: широкий силуэт, бумбокс на плече, огромные наушники
-		chest = C(60, 160, 80), chestMul = V(1.6, 1.15, 1.7), belly = C(60, 160, 80), bellyMul = V(1.55, 1.1, 1.65),
-		arm = C(60, 160, 80), armMul = 1.25, leg = C(30, 60, 40), legMul = 1.2, glove = C(250, 210, 60), gloveMul = 1.5,
-		shoe = C(240, 240, 240), shoeMul = 1.55, accent = SUPPORT,
+	COSTUME.greg = { -- потрёпанный инженер: грязный комбинезон, очки-гогглы на лбу, щетина, пояс с инструментами
+		chest = C(196, 118, 40), chestMul = V(1.5, 1.15, 1.5), belly = C(176, 104, 36), bellyMul = V(1.55, 1.15, 1.6),
+		arm = C(110, 108, 98), armMul = 1.25, leg = C(176, 104, 36), legMul = 1.2, glove = C(90, 70, 50), gloveMul = 1.75,
+		shoe = C(60, 44, 30), shoeMul = 1.5, accent = SUPPORT,
 		head = function(add, u)
 			local H = 1.4 * u
 			local y = (H - u) * 0.35
-			add("BigHead", V(H, H, H), CF(0, y, 0), C(200, 150, 110), M.SmoothPlastic, BALL)
-			add("Cap", V(0.3 * H, 1.04 * H, 1.04 * H), CF(0, y + 0.32 * H, 0) * VERT, C(250, 210, 60), M.SmoothPlastic, CYL)
-			add("CapBrim", V(0.7 * H, 0.07 * H, 0.45 * H), CF(0, y + 0.22 * H, 0.62 * H), C(60, 160, 80))
-			add("Band", V(1.12 * H, 0.1 * H, 0.16 * H), CF(0, y + 0.5 * H, 0), C(20, 20, 24))
-			for _, s in ipairs({ -1, 1 }) do
-				add("Phone", V(0.26 * H, 0.6 * H, 0.6 * H), CF(s * 0.55 * H, y, 0), C(20, 20, 24), M.SmoothPlastic, CYL)
-				add("PhoneRing", V(0.06 * H, 0.66 * H, 0.66 * H), CF(s * 0.66 * H, y, 0), SUPPORT, M.Neon, CYL)
+			local skin = C(210, 165, 130)
+			add("BigHead", V(H, H, H), CF(0, y, 0), skin, M.SmoothPlastic, BALL)
+			for i, p in ipairs({ { -0.25, 0.42, 20 }, { 0, 0.48, -10 }, { 0.25, 0.42, -25 }, { 0.1, 0.38, 40 } }) do
+				add("HairTuft", V(0.32 * H, 0.22 * H, 0.32 * H), CF(p[1] * H, y + p[2] * H, (0.05 + i * 0.03) * H) * CFrame.Angles(0, 0, math.rad(p[3])), C(130, 122, 112))
 			end
-			add("Shades", V(0.8 * H, 0.16 * H, 0.08 * H), CF(0, y + 0.06 * H, -0.47 * H), C(10, 10, 12), M.Glass)
-			add("Mustache", V(0.42 * H, 0.08 * H, 0.08 * H), CF(0, y - 0.14 * H, -0.48 * H), C(50, 30, 20))
+			add("GoggleBand", V(0.12 * H, 1.04 * H, 1.04 * H), CF(0, y + 0.28 * H, 0) * VERT, C(40, 36, 32), M.SmoothPlastic, CYL)
+			for _, s in ipairs({ -1, 1 }) do
+				add("Goggle", V(0.12 * H, 0.3 * H, 0.3 * H), CF(s * 0.17 * H, y + 0.32 * H, -0.48 * H) * ALONG_Z, C(90, 90, 96), M.Metal, CYL)
+				add("GoggleGlass", V(0.06 * H, 0.22 * H, 0.22 * H), CF(s * 0.17 * H, y + 0.32 * H, -0.54 * H) * ALONG_Z, C(110, 220, 230), M.Neon, CYL)
+				-- усталые глаза: мешки и опущенные веки
+				add("EyeBag", V(0.24 * H, 0.06 * H, 0.05 * H), CF(s * 0.19 * H, y - 0.08 * H, -0.46 * H), C(160, 110, 100))
+			end
+			eyes(add, H, y + 0.02 * H, C(235, 225, 200))
+			for _, s in ipairs({ -1, 1 }) do
+				add("Lid", V(0.36 * H, 0.16 * H, 0.1 * H), CF(s * 0.2 * H, y + 0.12 * H, -0.46 * H), skin:Lerp(BLACK, 0.15))
+			end
+			add("Stubble", V(0.7 * H, 0.32 * H, 0.42 * H), CF(0, y - 0.28 * H, -0.24 * H), C(110, 100, 92), M.Sand)
+			add("Mouth", V(0.22 * H, 0.04 * H, 0.05 * H), CF(0.04 * H, y - 0.24 * H, -0.47 * H) * CFrame.Angles(0, 0, math.rad(-8)), C(90, 40, 36))
 		end,
 		extra = function(add, s, accent)
-			local base = CF(s.X * 0.62, s.Y * 0.78, 0)
-			add("Boombox", V(2, 1.1, 0.7), base, C(90, 90, 98), M.Metal)
-			for _, x in ipairs({ -0.55, 0.55 }) do
-				add("Speaker", V(0.15, 0.8, 0.8), base * CF(x, 0, -0.38) * ALONG_Z, C(14, 14, 16), M.SmoothPlastic, CYL)
-				add("SpeakerRing", V(0.1, 0.9, 0.9), base * CF(x, 0, -0.36) * ALONG_Z, accent, M.Neon, CYL)
+			add("Bib", V(s.X * 0.8, s.Y * 0.6, 0.12), CF(0, s.Y * 0.1, -s.Z * 0.76), C(186, 110, 38))
+			for _, x in ipairs({ -0.28, 0.28 }) do
+				add("Strap", V(0.25, s.Y * 0.7, 0.12), CF(x * s.X, s.Y * 0.38, -s.Z * 0.76), C(150, 90, 30))
+				add("Button", V(0.25, 0.25, 0.25), CF(x * s.X, s.Y * 0.1, -s.Z * 0.82), C(200, 200, 205), M.Metal, BALL)
 			end
-			add("Handle", V(1.4, 0.15, 0.15), base * CF(0, 0.75, 0), C(40, 40, 44), M.Metal)
-			add("Chain", V(s.X * 0.7, 0.15, 0.12), CF(0, s.Y * 0.1, -s.Z * 0.88), Color3.fromRGB(255, 200, 60), M.Metal)
+			add("Stain", V(0.6, 0.4, 0.05), CF(-s.X * 0.2, -s.Y * 0.05, -s.Z * 0.83), C(60, 50, 40))
+			add("ToolBelt", V(s.X * 1.6, 0.4, s.Z * 1.65), CF(0, -s.Y * 0.5, 0), C(80, 56, 34))
+			add("WrenchHandle", V(0.22, 1.6, 0.18), CF(s.X * 0.75, -s.Y * 0.7, -s.Z * 0.3), C(160, 160, 168), M.Metal)
+			add("WrenchHead", V(0.6, 0.35, 0.2), CF(s.X * 0.75, -s.Y * 0.7 + 0.85, -s.Z * 0.3), C(160, 160, 168), M.Metal)
+			add("Badge", V(0.4, 0.4, 0.1), CF(s.X * 0.18, s.Y * 0.2, -s.Z * 0.83), accent, M.Neon)
 		end,
 	}
-	COSTUME.oscar = { -- громила: огромные плечи и перчатки, маленькая голова в каске, гаечный ключ за спиной
-		chest = C(120, 80, 50), chestMul = V(1.85, 1.25, 1.5), belly = C(60, 70, 110), bellyMul = V(1.4, 1.15, 1.35),
-		arm = C(120, 80, 50), armMul = 1.5, leg = C(60, 70, 110), legMul = 1.3, glove = C(150, 110, 60), gloveMul = 2.0,
-		shoe = C(50, 40, 30), shoeMul = 1.45, accent = LONE,
-		head = function(add, u)
-			local H = 1.1 * u
-			local y = (H - u) * 0.3
-			add("BigHead", V(H, H, H), CF(0, y, 0), SKIN, M.SmoothPlastic, BALL)
-			add("Helmet", V(0.4 * H, 1.12 * H, 1.12 * H), CF(0, y + 0.32 * H, 0) * VERT, C(230, 190, 40), M.SmoothPlastic, CYL)
-			add("HelmetBrim", V(0.08 * H, 1.4 * H, 1.4 * H), CF(0, y + 0.15 * H, 0) * VERT, C(200, 160, 30), M.SmoothPlastic, CYL)
-			add("Headlamp", V(0.2 * H, 0.3 * H, 0.3 * H), CF(0, y + 0.32 * H, -0.6 * H) * ALONG_Z, C(255, 250, 210), M.Neon, CYL)
-			add("Beard", V(0.85 * H, 0.6 * H, 0.42 * H), CF(0, y - 0.32 * H, -0.3 * H), C(90, 56, 30))
-			for _, s in ipairs({ -1, 1 }) do
-				add("Pupil", V(0.12 * H, 0.12 * H, 0.12 * H), CF(s * 0.18 * H, y + 0.06 * H, -0.48 * H), BLACK, M.SmoothPlastic, BALL)
-			end
-		end,
-		extra = function(add, s, accent)
-			for _, x in ipairs({ -1, 1 }) do
-				add("ShoulderPad", V(s.X * 0.55, s.Y * 0.35, s.Z * 1.6), CF(x * s.X * 0.95, s.Y * 0.55, 0), C(230, 110, 30))
-				add("PadTrim", V(s.X * 0.57, 0.12, s.Z * 1.62), CF(x * s.X * 0.95, s.Y * 0.4, 0), accent, M.Neon)
-			end
-			add("WrenchHandle", V(0.35, 3.4, 0.25), CF(0, s.Y * 0.1, s.Z * 0.9) * CFrame.Angles(0, 0, math.rad(35)), C(150, 150, 160), M.Metal)
-			add("WrenchJaw", V(1.1, 0.6, 0.3), CF(-0.9, s.Y * 0.1 + 1.35, s.Z * 0.9) * CFrame.Angles(0, 0, math.rad(35)), C(150, 150, 160), M.Metal)
-		end,
-	}
-	COSTUME.felix = { -- сталкер: противогаз со светящимися стёклами, длинный плащ, огромный рюкзак
-		chest = C(110, 120, 70), chestMul = V(1.1, 1.2, 1.2), belly = C(110, 120, 70), bellyMul = V(1.25, 1.9, 1.25),
-		arm = C(110, 120, 70), armMul = 1.0, leg = C(40, 40, 40), legMul = 0.9, glove = C(25, 25, 25), gloveMul = 1.3,
-		shoe = C(60, 50, 40), shoeMul = 1.25, accent = LONE,
+	COSTUME.oscar = { -- тихоня: тёмная толстовка, капюшон, чёлка закрывает глаз, бледное лицо
+		chest = C(40, 40, 50), chestMul = V(1.2, 1.15, 1.25), belly = C(36, 36, 46), bellyMul = V(1.2, 1.2, 1.25),
+		arm = C(40, 40, 50), armMul = 1.15, leg = C(30, 32, 46), legMul = 1.05, glove = C(226, 206, 192), gloveMul = 1.15,
+		shoe = C(24, 24, 28), shoeMul = 1.3, accent = LONE,
 		head = function(add, u)
 			local H = 1.45 * u
 			local y = (H - u) * 0.4
-			add("Hood", V(1.12 * H, 1.12 * H, 1.12 * H), CF(0, y + 0.04 * H, 0.12 * H), C(90, 98, 56), M.Fabric, BALL)
-			add("Mask", V(H, H, H), CF(0, y, 0), C(58, 60, 56), M.SmoothPlastic, BALL)
-			for _, s in ipairs({ -1, 1 }) do
-				add("LensRim", V(0.08 * H, 0.42 * H, 0.42 * H), CF(s * 0.2 * H, y + 0.08 * H, -0.46 * H) * ALONG_Z, C(20, 20, 20), M.Metal, CYL)
-				add("Lens", V(0.06 * H, 0.32 * H, 0.32 * H), CF(s * 0.2 * H, y + 0.08 * H, -0.5 * H) * ALONG_Z, Color3.fromRGB(255, 140, 40), M.Neon, CYL)
-			end
-			add("Filter", V(0.36 * H, 0.3 * H, 0.3 * H), CF(0, y - 0.22 * H, -0.55 * H) * ALONG_Z, C(40, 42, 40), M.Metal, CYL)
+			local pale = C(226, 206, 192)
+			local hair = C(22, 22, 28)
+			add("Hood", V(1.18 * H, 1.12 * H, 1.12 * H), CF(0, y + 0.04 * H, 0.14 * H), C(48, 48, 60), M.Fabric, BALL)
+			add("BigHead", V(H, H, H), CF(0, y, -0.02 * H), pale, M.SmoothPlastic, BALL)
+			add("Hair", V(1.02 * H, 0.6 * H, 1.0 * H), CF(0, y + 0.3 * H, 0.02 * H), hair, M.SmoothPlastic, BALL)
+			-- длинная чёлка падает на правый глаз
+			add("Fringe", V(0.5 * H, 0.5 * H, 0.2 * H), CF(0.14 * H, y + 0.12 * H, -0.44 * H) * CFrame.Angles(0, 0, math.rad(-22)), hair)
+			-- взгляд в пол: зрачки опущены, под глазами тени
+			add("EyeWhite", V(0.3 * H, 0.3 * H, 0.3 * H), CF(-0.19 * H, y + 0.02 * H, -0.37 * H), WHITE, M.SmoothPlastic, BALL)
+			add("Pupil", V(0.13 * H, 0.13 * H, 0.13 * H), CF(-0.18 * H, y - 0.06 * H, -0.5 * H), BLACK, M.SmoothPlastic, BALL)
+			add("DarkCircle", V(0.26 * H, 0.06 * H, 0.05 * H), CF(-0.19 * H, y - 0.13 * H, -0.45 * H), C(150, 130, 150))
+			add("Mouth", V(0.14 * H, 0.04 * H, 0.05 * H), CF(0, y - 0.25 * H, -0.47 * H) * CFrame.Angles(0, 0, math.rad(6)), C(120, 80, 80))
 		end,
 		extra = function(add, s, accent)
-			add("Backpack", V(s.X * 0.9, s.Y * 1.25, 1), CF(0, s.Y * 0.1, s.Z * 0.6 + 0.55), C(70, 76, 44), M.Fabric)
-			add("Bedroll", V(s.X * 1.1, 0.8, 0.8), CF(0, s.Y * 0.85, s.Z * 0.6 + 0.55), C(140, 60, 40), M.Fabric, CYL)
-			add("Antenna", V(0.1, 3, 0.1), CF(s.X * 0.35, s.Y * 1.4, s.Z * 0.6 + 0.6), C(40, 40, 40), M.Metal)
-			add("AntennaTip", V(0.3, 0.3, 0.3), CF(s.X * 0.35, s.Y * 1.4 + 1.5, s.Z * 0.6 + 0.6), accent, M.Neon, BALL)
+			add("Pocket", V(s.X * 0.75, s.Y * 0.32, 0.14), CF(0, -s.Y * 0.18, -s.Z * 0.68), C(34, 34, 44))
+			for _, x in ipairs({ -0.12, 0.12 }) do
+				add("Drawstring", V(0.08, s.Y * 0.55, 0.08), CF(x * s.X, s.Y * 0.18, -s.Z * 0.7), C(200, 200, 205))
+			end
+			add("Earbud", V(0.1, s.Y * 0.8, 0.1), CF(-s.X * 0.3, s.Y * 0.2, -s.Z * 0.66) * CFrame.Angles(0, 0, math.rad(15)), accent, M.Neon)
+			add("Bag", V(s.X * 0.8, s.Y * 0.9, 0.7), CF(0, -s.Y * 0.05, s.Z * 0.6 + 0.35), C(30, 30, 36), M.Fabric)
+		end,
+	}
+	COSTUME.felix = { -- маг: высокая шляпа со звёздами, длинная мантия, плащ, парящая сфера маны
+		chest = C(32, 42, 96), chestMul = V(1.2, 1.2, 1.25), belly = C(26, 32, 80), bellyMul = V(1.35, 2.0, 1.35),
+		arm = C(44, 60, 130), armMul = 1.3, leg = C(22, 26, 60), legMul = 1.0, glove = C(200, 205, 225), gloveMul = 1.25,
+		shoe = C(20, 20, 34), shoeMul = 1.3, accent = Color3.fromRGB(90, 150, 255),
+		head = function(add, u)
+			local H = 1.45 * u
+			local y = (H - u) * 0.4
+			local hat = C(34, 44, 110)
+			add("BigHead", V(H, H, H), CF(0, y, 0), C(214, 214, 230), M.SmoothPlastic, BALL)
+			add("Hair", V(1.04 * H, 0.5 * H, 1.04 * H), CF(0, y + 0.22 * H, 0.06 * H), C(30, 30, 60), M.SmoothPlastic, BALL)
+			add("HatBrim", V(0.08 * H, 1.6 * H, 1.6 * H), CF(0, y + 0.42 * H, 0) * VERT, hat, M.Fabric, CYL)
+			-- конус шляпы из ярусов, кончик загнут назад
+			for i, d in ipairs({ 1.0, 0.78, 0.56, 0.36, 0.2 }) do
+				add("HatCone", V(0.28 * H, d * H, d * H), CF(0, y + (0.5 + i * 0.24) * H, (i * i) * 0.012 * H) * VERT, hat, M.Fabric, CYL)
+			end
+			add("HatBand", V(0.1 * H, 1.02 * H, 1.02 * H), CF(0, y + 0.54 * H, 0) * VERT, C(90, 150, 255), M.Neon, CYL)
+			for _, p in ipairs({ { -0.3, 0.8, -0.32 }, { 0.22, 1.05, -0.24 }, { -0.05, 1.3, -0.16 } }) do
+				add("Star", V(0.12 * H, 0.12 * H, 0.12 * H), CF(p[1] * H, y + p[2] * H, p[3] * H), C(255, 220, 90), M.Neon, BALL)
+			end
+			-- светящиеся глаза мага
+			eyes(add, H, y + 0.02 * H, C(200, 230, 255), C(60, 140, 255))
+			add("Collar", V(1.0 * H, 0.3 * H, 0.95 * H), CF(0, y - 0.48 * H, 0.04 * H), C(26, 32, 80), M.Fabric)
+		end,
+		extra = function(add, s, accent)
+			add("Cape", V(s.X * 1.4, s.Y * 2.4, 0.15), CF(0, -s.Y * 0.4, s.Z * 0.75), C(20, 24, 60), M.Fabric)
+			add("CapeLining", V(s.X * 1.3, s.Y * 2.3, 0.05), CF(0, -s.Y * 0.4, s.Z * 0.66), C(60, 90, 200), M.Fabric)
+			add("Pendant", V(0.4, 0.55, 0.15), CF(0, s.Y * 0.05, -s.Z * 0.7) * CFrame.Angles(0, 0, math.rad(45)), accent, M.Neon)
+			add("Orb", V(0.9, 0.9, 0.9), CF(s.X * 1.1, s.Y * 0.6, -s.Z * 0.6), C(110, 170, 255), M.Neon, BALL)
+			add("Sash", V(s.X * 1.3, 0.35, s.Z * 1.3), CF(0, -s.Y * 0.45, 0), C(90, 150, 255), M.Fabric)
 		end,
 	}
 	local KILL = Color3.fromRGB(150, 10, 10)
@@ -1117,24 +1193,7 @@ local function addEscape(def, x, z, label, normal, build)
 		beamPart = mk(m, "Beam", Vector3.new(def.beamH, 3, 3), CFrame.new(pos - normal * 10 + Vector3.new(0, def.beamH / 2, 0)) * VERT,
 			GREEN, M.Neon, { Shape = CYL, Transparency = 1, CanCollide = false, CanQuery = false, CastShadow = false })
 	end
-	local bb = Instance.new("BillboardGui")
-	bb.Size = UDim2.fromOffset(260, 40)
-	bb.StudsOffset = Vector3.new(0, 13, 0)
-	bb.AlwaysOnTop = true
-	bb.MaxDistance = 1200
-	bb.Adornee = zone
-	bb.Enabled = false
-	bb.Parent = zone
-	local txt = Instance.new("TextLabel")
-	txt.Size = UDim2.fromScale(1, 1)
-	txt.BackgroundTransparency = 1
-	txt.Font = Enum.Font.GothamBlack
-	txt.TextSize = 20
-	txt.TextStrokeTransparency = 0.2
-	txt.TextColor3 = GREEN
-	txt.Text = "ВЫХОД: " .. label
-	txt.Parent = bb
-	table.insert(def.escapes, { zone = zone, doors = doors, lamp = lamp, light = light, beam = beamPart, gui = bb, label = label, token = 0 })
+	table.insert(def.escapes, { zone = zone, doors = doors, lamp = lamp, light = light, beam = beamPart, label = label, token = 0 })
 	reserve(def, x, z, 14)
 end
 
@@ -1173,7 +1232,6 @@ local function setEscapeVisual(e, on)
 	e.light.Range = on and 30 or 18
 	e.light.Brightness = on and 3 or 1.2
 	if e.beam then e.beam.Transparency = on and 0.6 or 1 end
-	e.gui.Enabled = on
 	animateDoors(e, on)
 end
 
@@ -2435,23 +2493,23 @@ local killer = nil
 local killerChar = nil     -- данные персонажа Палача
 local killerMods = nil
 local kills = 0
-local survivorList = {}    -- { {player, userId, name, dname, charId, port, status} }
+local survivorList = {}    -- { {player, userId, name, dname, charId, port, status, char} }
 local entryOf = {}
 local matchConns = {}
 local lastMap, lastKiller = nil, nil
 local stamina = {}         -- [player] = {value, max, exhausted, regenAt, want, isKiller, speedMul}
 local boostUntil = {}
 local matchEndAt = 0
-local fx = { dashUntil = 0, vanishUntil = 0, vanishSaved = nil, stunUntil = 0, stunImmuneUntil = 0, bandage = {} }
+-- Палач: рывок, прятки, оглушение (с иммунитетом) и замедления от навыков выживших
+local fx = { dashUntil = 0, vanishUntil = 0, vanishSaved = nil, stunUntil = 0, stunImmuneUntil = 0, slows = {} }
+-- навыки выживших: состояние игроков, станции и растяжки Грега, бафф станции ускорения.
+-- Всё в одной таблице: у главного чанка Luau лимит в 200 локальных.
+local SK = { state = {}, devices = {}, stationBoost = {}, use = {} }
 
 local function serverNow() return Workspace:GetServerTimeNow() end
 
 local function survivorMods(c)
-	return {
-		hp = 1 + (c.hp - 3) * 0.08,
-		speed = 1 + (c.speed - 3) * 0.025,
-		stamina = 1 + (c.stamina - 3) * 0.08,
-	}
+	return { hp = c.hp or 100, staminaMax = c.stamina or 100, speed = 1 }
 end
 
 local function killerModsOf(c)
@@ -2460,6 +2518,13 @@ local function killerModsOf(c)
 		stamina = 1 + (c.stamina - 3) * 0.08,
 		attack = 1 - (c.power - 3) * 0.1,
 	}
+end
+
+-- прыжков в игре нет: ни в лобби, ни на сцене, ни в матче
+local function noJump(hum)
+	hum.UseJumpPower = true
+	hum.JumpPower = 0
+	hum.JumpHeight = 0
 end
 
 local function setPhase(p) gameState:SetAttribute("Phase", p) end
@@ -2578,15 +2643,15 @@ local function burst(part, color, texture, count)
 end
 
 ------------------------------------------------------------------------
--- ВЫНОСЛИВОСТЬ, БЕГ (Shift), УСКОРЕНИЯ, ОГЛУШЕНИЕ, РЫВОК/ПРЯТКИ, ПЕРЕВЯЗКА
+-- ВЫНОСЛИВОСТЬ, БЕГ (Shift), УСКОРЕНИЯ, ОГЛУШЕНИЕ, ЗАМЕДЛЕНИЯ, РЫВОК/ПРЯТКИ
 -- Всё считается на сервере; клиент только сообщает «держу Shift».
 ------------------------------------------------------------------------
 local function initStamina(p, isKiller, mods)
 	mods = mods or { stamina = 1, speed = 1 }
-	local max = (isKiller and CONFIG.STAMINA_MAX_KILLER or CONFIG.STAMINA_MAX_SURVIVOR) * mods.stamina
+	local max = mods.staminaMax or CONFIG.STAMINA_MAX_KILLER * (mods.stamina or 1)
 	stamina[p] = {
 		value = max, max = max, exhausted = false, regenAt = 0, want = false,
-		isKiller = isKiller, speedMul = mods.speed,
+		isKiller = isKiller, speedMul = mods.speed or 1,
 	}
 	p:SetAttribute("MaxStamina", math.floor(max + 0.5))
 	p:SetAttribute("Stamina", math.floor(max + 0.5))
@@ -2597,7 +2662,7 @@ end
 local function clearStamina(p)
 	stamina[p] = nil
 	boostUntil[p] = nil
-	fx.bandage[p] = nil
+	SK.stationBoost[p] = nil
 	p:SetAttribute("MaxStamina", nil)
 	p:SetAttribute("Stamina", nil)
 	p:SetAttribute("Exhausted", nil)
@@ -2609,7 +2674,7 @@ local function watchDamage(p, hum)
 	table.insert(matchConns, hum.HealthChanged:Connect(function(h)
 		if h < last and h > 0 then
 			boostUntil[p] = os.clock() + CONFIG.HIT_BOOST_TIME
-			fx.bandage[p] = nil -- удар срывает перевязку
+			SK.interrupt(p) -- любой урон срывает лечение Лилиан
 		end
 		last = h
 	end))
@@ -2649,7 +2714,7 @@ local function setVanish(on)
 				if x then x.Enabled = true end
 			end
 		end
-		if killer then killer:SetAttribute("AbilityUntil", 0) end
+		if killer then killer:SetAttribute("Skill1Until", 0) end
 	end
 end
 
@@ -2657,14 +2722,18 @@ RunService.Heartbeat:Connect(function(dt)
 	if not matchActive then return end
 	local now = os.clock()
 	if fx.vanishSaved and now >= fx.vanishUntil then setVanish(false) end
+	SK.tick(now, dt)
+	local slow = SK.killerSlow(now)
 	for p, s in pairs(stamina) do
 		local char = p.Character
 		local hum = char and char:FindFirstChildOfClass("Humanoid")
 		if hum and hum.Health > 0 then
+			local st = SK.state[p]
 			local base = (s.isKiller and CONFIG.KILLER_SPEED or CONFIG.SURVIVOR_SPEED) * s.speedMul
 			local run = (s.isKiller and CONFIG.KILLER_SPRINT_SPEED or CONFIG.SURVIVOR_SPRINT_SPEED) * s.speedMul
 			local moving = hum.MoveDirection.Magnitude > 0.1
-			local sprinting = s.want and moving and not s.exhausted and s.value > 0
+			local canRun = not (st and SK.noRun(st, now))
+			local sprinting = s.want and moving and canRun and not s.exhausted and s.value > 0
 
 			if sprinting then
 				s.value = math.max(0, s.value - CONFIG.STAMINA_DRAIN * dt)
@@ -2681,27 +2750,31 @@ RunService.Heartbeat:Connect(function(dt)
 			end
 
 			local speed = sprinting and run or base
-			local boosted = boostUntil[p] ~= nil and now < boostUntil[p]
-			if boosted then speed *= CONFIG.HIT_BOOST_MULT end
-			local bd = fx.bandage[p]
-			if bd then
-				if now < bd then
-					hum.Health = math.min(hum.MaxHealth, hum.Health + 15 * dt)
-					speed *= 0.7
-				else
-					fx.bandage[p] = nil
-				end
+			local boosted = false
+			if boostUntil[p] and now < boostUntil[p] then
+				speed *= CONFIG.HIT_BOOST_MULT
+				boosted = true
+			end
+			if (SK.stationBoost[p] or 0) > now then
+				speed *= CONFIG.STATION_SPEED
+				boosted = true
+			end
+			if st then
+				speed *= SK.speedMul(st, now)
+				if st.adrenalineUntil > now then boosted = true end
 			end
 			if p == killer then
 				if now < fx.dashUntil then speed = CONFIG.DASH_SPEED end
 				if fx.vanishSaved then speed *= 1.08 end
+				speed *= 1 - slow
 				if now < fx.stunUntil then speed = 0 end
 			end
 			hum.WalkSpeed = speed
 
 			p:SetAttribute("Stamina", math.floor(s.value + 0.5))
-			p:SetAttribute("Exhausted", s.exhausted)
+			p:SetAttribute("Exhausted", s.exhausted or (st ~= nil and st.windedUntil > now and st.adrenalineUntil <= now))
 			p:SetAttribute("Boosted", boosted)
+			p:SetAttribute("NoSprint", not canRun)
 		end
 	end
 end)
@@ -2713,6 +2786,7 @@ local function markDead(e, text)
 	if e.status ~= "alive" then return end
 	e.status = "dead"
 	e.player:SetAttribute("Status", "dead")
+	SK.reset(e.player)
 	clearStamina(e.player)
 	removeFlashlight(e.player.Character)
 	publishRoster()
@@ -2723,12 +2797,13 @@ local function markEscaped(e)
 	if e.status ~= "alive" then return end
 	e.status = "escaped"
 	e.player:SetAttribute("Status", "escaped")
+	SK.reset(e.player)
 	clearStamina(e.player)
 	local char = e.player.Character
 	removeFlashlight(char)
 	if char then
 		local hum = char:FindFirstChildOfClass("Humanoid")
-		if hum then hum.WalkSpeed = 16 end
+		if hum then hum.WalkSpeed = CONFIG.SURVIVOR_SPEED end
 		char:PivotTo(lobbyCFrame())
 	end
 	publishRoster()
@@ -2737,7 +2812,7 @@ local function markEscaped(e)
 end
 
 ------------------------------------------------------------------------
--- ОРУЖИЕ, ОГЛУШЕНИЕ И СПОСОБНОСТИ
+-- ОРУЖИЕ, ОГЛУШЕНИЕ И НАВЫКИ
 ------------------------------------------------------------------------
 local function weldTool(handle, name, size, offset, color, mat, shape)
 	local p = Instance.new("Part")
@@ -2842,83 +2917,583 @@ local function clearLine(fromPos, toPos, ignore)
 	return Workspace:Raycast(fromPos, toPos - fromPos, params) == nil
 end
 
-local function survivorAbility(p, e, char, hum, hrp)
-	local ab = e.char.ability
+------------------------------------------------------------------------
+-- НАВЫКИ ВЫЖИВШИХ: skills[1] — Q, skills[2] — E
+-- Атрибуты игрока для HUD: Skill1ReadyAt/Skill2ReadyAt (время готовности), Skill1Until/Skill2Until
+-- (конец активной фазы), Skill1Broken (бита Айши), Mana/MaxMana (Феликс), NoSprint.
+------------------------------------------------------------------------
+function SK.get(p)
+	local st = SK.state[p]
+	if not st then
+		st = { noSprintUntil = 0, windupUntil = 0, adrenalineUntil = 0, windedUntil = 0 }
+		SK.state[p] = st
+	end
+	return st
+end
+
+function SK.setReady(p, slot, t) p:SetAttribute("Skill" .. slot .. "ReadyAt", t) end
+function SK.setActive(p, slot, t) p:SetAttribute("Skill" .. slot .. "Until", t) end
+
+-- подсветка через обводку персонажа: белая — контр-удар, зелёная — лечение, синяя — щит
+function SK.glow(char, color)
+	local hl = char and char:FindFirstChild("P2D_Outline")
+	if not hl then return end
+	if color then
+		hl.OutlineColor = color
+		hl.OutlineTransparency = 0
+		hl.FillColor = color
+		hl.FillTransparency = 0.72
+	else
+		local c = CHAR_BY_ID[char:GetAttribute("CharId") or ""]
+		hl.OutlineColor = c and roleColor(c) or WHITE
+		hl.OutlineTransparency = 0.25
+		hl.FillTransparency = 1
+	end
+end
+
+-- Палач перед выжившим (дальность, конус) — для удара, биты, вспышки
+function SK.inFront(hrp, range, minDot)
+	local kchar, khrp = killerAlive()
+	if not kchar then return nil end
+	local d = khrp.Position - hrp.Position
+	local flat = Vector3.new(d.X, 0, d.Z)
+	if flat.Magnitude > range or flat.Magnitude < 0.05 or math.abs(d.Y) > 8 then return nil end
+	local look = Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z)
+	if look.Magnitude < 0.05 or flat.Unit:Dot(look.Unit) < minDot then return nil end
+	return kchar, khrp
+end
+
+-- Палач смотрит в сторону pos (удар битой «в лицо», ослепление вспышкой)
+function SK.killerFaces(khrp, pos, minDot)
+	local d = pos - khrp.Position
+	d = Vector3.new(d.X, 0, d.Z)
+	local look = Vector3.new(khrp.CFrame.LookVector.X, 0, khrp.CFrame.LookVector.Z)
+	if d.Magnitude < 0.05 or look.Magnitude < 0.05 then return false end
+	return d.Unit:Dot(look.Unit) >= minDot
+end
+
+function SK.flatLook(hrp)
+	local look = Vector3.new(hrp.CFrame.LookVector.X, 0, hrp.CFrame.LookVector.Z)
+	return look.Magnitude > 0.05 and look.Unit or Vector3.new(0, 0, -1)
+end
+
+function SK.slowKiller(frac, sec)
+	if not matchActive or not killer then return end
+	frac = math.clamp(frac, 0, 0.9)
+	table.insert(fx.slows, { frac = frac, untilT = os.clock() + sec })
+	fxEvent:FireClient(killer, "slowed", math.floor(frac * 100 + 0.5), sec)
+end
+
+-- самое сильное из действующих замедлений Палача (доля 0..0.9)
+function SK.killerSlow(now)
+	local m = 0
+	for i = #fx.slows, 1, -1 do
+		local sl = fx.slows[i]
+		if now >= sl.untilT then table.remove(fx.slows, i) else m = math.max(m, sl.frac) end
+	end
+	return m
+end
+
+function SK.noRun(st, now)
+	return st.noSprintUntil > now or st.guard ~= nil or st.channel ~= nil or st.windupUntil > now
+		or (st.windedUntil > now and st.adrenalineUntil <= now)
+end
+
+function SK.speedMul(st, now)
+	if st.channel then return 0 end -- поза лечения и самолечение: на месте
+	local m = 1
+	if st.adrenalineUntil > now then
+		m *= CONFIG.ADRENALINE_MULT
+	elseif st.windedUntil > now then
+		m *= CONFIG.WINDED_MULT -- одышка после адреналина
+	end
+	if st.windupUntil > now then m *= 0.5 end
+	return m
+end
+
+-- предмет в правой руке на время навыка (бита, камера)
+function SK.handProp(char, name, size, offset, color, mat)
+	local hand = char:FindFirstChild("RightHand") or char:FindFirstChild("Right Arm")
+	if not hand then return nil end
+	return gearPart(char, hand, name, size, offset, color, mat)
+end
+
+function SK.swish(part)
+	local s = Instance.new("Sound")
+	s.SoundId = "rbxasset://sounds/swordslash.wav"
+	s.Volume = 0.6
+	s.PlaybackSpeed = 1.3
+	s.Parent = part
+	s:Play()
+	Debris:AddItem(s, 2)
+end
+
+-- стойки: контр-удар Алекса и силовой щит Феликса
+function SK.startGuard(p, kind, dur, slot)
+	local st = SK.get(p)
+	local char = p.Character
+	st.guard = { kind = kind, untilT = os.clock() + dur, slot = slot }
+	SK.setActive(p, slot, serverNow() + dur)
+	SK.glow(char, kind == "counter" and WHITE or Color3.fromRGB(90, 150, 255))
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if kind == "shield" and hrp then
+		local bubble = gearPart(char, hrp, "P2D_Shield", Vector3.new(8, 8, 8), CFrame.identity, Color3.fromRGB(90, 150, 255), M.ForceField, BALL)
+		bubble.Transparency = 0.15
+	end
+end
+
+function SK.endGuard(p)
+	local st = SK.state[p]
+	if not st or not st.guard then return end
+	SK.setActive(p, st.guard.slot, 0)
+	st.guard = nil
+	local char = p.Character
+	SK.glow(char, nil)
+	local b = char and char:FindFirstChild("P2D_Shield")
+	if b then b:Destroy() end
+end
+
+-- удар Палача по выжившему в стойке: урона нет, Палач оглушён
+function SK.tryBlock(e)
+	local st = SK.state[e.player]
+	if not st or not st.guard then return false end
+	local kind = st.guard.kind
+	SK.endGuard(e.player)
+	local hrp = e.player.Character and e.player.Character:FindFirstChild("HumanoidRootPart")
+	if hrp then burst(hrp, kind == "counter" and WHITE or Color3.fromRGB(90, 150, 255), nil, 60) end
+	stunKiller(kind == "counter" and CONFIG.COUNTER_STUN or CONFIG.SHIELD_STUN, e.name)
+	fxEvent:FireClient(e.player, "blocked", kind)
+	return true
+end
+
+-- щит можно сбросить раньше: волна отталкивает Палача
+function SK.releaseShield(p, hrp)
+	SK.endGuard(p)
+	burst(hrp, Color3.fromRGB(90, 150, 255), nil, 70)
+	local kchar, khrp = killerAlive()
+	if not kchar then return end
+	local d = khrp.Position - hrp.Position
+	local flat = Vector3.new(d.X, 0, d.Z)
+	if flat.Magnitude <= CONFIG.SHIELD_PUSH_RADIUS then
+		local dir = flat.Magnitude > 0.05 and flat.Unit or SK.flatLook(hrp)
+		fxEvent:FireClient(killer, "knockback", dir * CONFIG.SHIELD_PUSH + Vector3.new(0, 16, 0))
+		announce("Щит отбросил Палача!", "good", p)
+	end
+end
+
+-- поза лечения и самолечение Лилиан: на месте, любой урон отменяет
+function SK.startChannel(p, e, kind, dur, slot)
+	local st = SK.get(p)
+	local char = p.Character
+	st.channel = { kind = kind, untilT = os.clock() + dur, dur = dur, slot = slot }
+	SK.setActive(p, slot, serverNow() + dur)
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if kind == "heal" then
+		SK.glow(char, Color3.fromRGB(80, 255, 140))
+		if hrp then
+			-- союзник подходит и жмёт F; Палачу и самой Лилиан клиент подсказку не показывает
+			local prompt = Instance.new("ProximityPrompt")
+			prompt.Name = "P2D_HealPrompt"
+			prompt.ActionText = "Лечение"
+			prompt.ObjectText = e.name
+			prompt.KeyboardKeyCode = Enum.KeyCode.F
+			prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+			prompt.HoldDuration = 0.6
+			prompt.MaxActivationDistance = CONFIG.HEAL_RADIUS
+			prompt.RequiresLineOfSight = false
+			prompt:SetAttribute("OwnerId", p.UserId)
+			prompt.Triggered:Connect(function(other) SK.acceptHeal(p, other) end)
+			prompt.Parent = hrp
+			tag(prompt, "P2D_HealPrompt")
+			st.channel.prompt = prompt
+		end
+	elseif hrp then
+		burst(hrp, Color3.fromRGB(80, 255, 140), nil, 25)
+	end
+end
+
+function SK.endChannel(p, reason)
+	local st = SK.state[p]
+	local ch = st and st.channel
+	if not ch then return end
+	st.channel = nil
+	if ch.prompt then ch.prompt:Destroy() end
+	SK.glow(p.Character, nil)
+	SK.setActive(p, ch.slot, 0)
+	local e = entryOf[p]
+	local sk = e and e.char.skills and e.char.skills[ch.slot]
+	if sk then SK.setReady(p, ch.slot, serverNow() + sk.cd) end -- перезарядка — с момента окончания
+	if reason == "hit" then fxEvent:FireClient(p, "interrupted") end
+end
+
+function SK.interrupt(p)
+	SK.endChannel(p, "hit")
+end
+
+function SK.acceptHeal(p, other)
+	local st = SK.state[p]
+	if not st or not st.channel or st.channel.kind ~= "heal" or other == p then return end
+	local oe = entryOf[other]
+	if not oe or oe.status ~= "alive" then return end
+	local oh = other.Character and other.Character:FindFirstChildOfClass("Humanoid")
+	if not oh or oh.Health <= 0 then return end
+	oh.Health = math.min(oh.MaxHealth, oh.Health + CONFIG.HEAL_AMOUNT)
+	local orp = other.Character:FindFirstChild("HumanoidRootPart")
+	if orp then burst(orp, Color3.fromRGB(80, 255, 140), nil, 50) end
+	fxEvent:FireClient(other, "healed", entryOf[p] and entryOf[p].name)
+	fxEvent:FireClient(p, "healgiven", oe.name)
+	SK.endChannel(p, "done")
+end
+
+-- точка на земле под pos (для станций и растяжек)
+function SK.groundAt(pos, ignore)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = ignore
+	local r = Workspace:Raycast(pos + Vector3.new(0, 2, 0), Vector3.new(0, -14, 0), params)
+	return r and r.Position or (pos - Vector3.new(0, 3, 0))
+end
+
+function SK.removeDevice(i)
+	local d = table.remove(SK.devices, i)
+	if d and d.model then d.model:Destroy() end
+end
+
+function SK.placeStation(p, kind, hrp, dur)
+	for i = #SK.devices, 1, -1 do -- у Грега одна станция: старая убирается
+		if SK.devices[i].owner == p and SK.devices[i].kind ~= "wire" then SK.removeDevice(i) end
+	end
+	local look = SK.flatLook(hrp)
+	local ground = SK.groundAt(hrp.Position + look * 3, { p.Character, killer and killer.Character })
+	local heal = kind == "heal"
+	local col = heal and Color3.fromRGB(80, 255, 140) or Color3.fromRGB(255, 220, 60)
+	local m = Instance.new("Model")
+	m.Name = heal and "HealStation" or "SpeedStation"
+	local cf = CFrame.lookAt(ground, ground - look) -- лицевой стороной к Грегу
+	local body = mk(m, "StationBody", Vector3.new(2.4, 2, 2.4), cf * CFrame.new(0, 1, 0),
+		heal and Color3.fromRGB(230, 230, 236) or Color3.fromRGB(50, 50, 56), M.Metal)
+	mk(m, "StationBase", Vector3.new(3, 0.3, 3), cf * CFrame.new(0, 0.15, 0), Color3.fromRGB(70, 70, 76), M.DiamondPlate)
+	local lamp = mk(m, "StationLamp", Vector3.new(1.2, 0.6, 1.2), cf * CFrame.new(0, 2.3, 0), col, M.Neon, NOCOL)
+	pointLight(lamp, col, 16, 1.5)
+	tag(lamp, "P2D_Blink", { Rate = 1.2 })
+	if heal then
+		mk(m, "CrossH", Vector3.new(1.4, 0.4, 0.05), cf * CFrame.new(0, 1.1, -1.23), col, M.Neon, NOCOL)
+		mk(m, "CrossV", Vector3.new(0.4, 1.4, 0.05), cf * CFrame.new(0, 1.1, -1.23), col, M.Neon, NOCOL)
+	else
+		mk(m, "BoltA", Vector3.new(0.35, 1, 0.05), cf * CFrame.new(0.12, 1.4, -1.23) * CFrame.Angles(0, 0, math.rad(-25)), col, M.Neon, NOCOL)
+		mk(m, "BoltB", Vector3.new(0.35, 1, 0.05), cf * CFrame.new(-0.12, 0.8, -1.23) * CFrame.Angles(0, 0, math.rad(-25)), col, M.Neon, NOCOL)
+	end
+	cyl(m, "StationRing", 0.06, CONFIG.STATION_RADIUS * 2, ground + Vector3.new(0, 0.06, 0), col, M.Neon,
+		{ Transparency = 0.82, CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false })
+	m.Parent = currentDef and currentDef.dynamic or Workspace
+	table.insert(SK.devices, { kind = kind, owner = p, model = m, body = body, pos = ground, untilT = os.clock() + dur })
+end
+
+function SK.placeWire(p, hrp)
+	local mine = {}
+	for i, d in ipairs(SK.devices) do
+		if d.owner == p and d.kind == "wire" then table.insert(mine, i) end
+	end
+	if #mine >= CONFIG.TRIPWIRE_MAX then SK.removeDevice(mine[1]) end
+	local look = SK.flatLook(hrp)
+	local right = Vector3.new(-look.Z, 0, look.X)
+	local center = SK.groundAt(hrp.Position + look * 2, { p.Character, killer and killer.Character })
+	local a, b = center + right * 3.5, center - right * 3.5
+	local m = Instance.new("Model")
+	m.Name = "Tripwire"
+	local post = mk(m, "WirePost", Vector3.new(0.25, 1.3, 0.25), a + Vector3.new(0, 0.65, 0), Color3.fromRGB(80, 70, 60), M.Wood)
+	mk(m, "WirePost", Vector3.new(0.25, 1.3, 0.25), b + Vector3.new(0, 0.65, 0), Color3.fromRGB(80, 70, 60), M.Wood)
+	beam(m, "Wire", a + Vector3.new(0, 0.8, 0), b + Vector3.new(0, 0.8, 0), 0.06, Color3.fromRGB(150, 150, 140), M.Metal,
+		{ CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false })
+	m.Parent = currentDef and currentDef.dynamic or Workspace
+	table.insert(SK.devices, { kind = "wire", owner = p, model = m, body = post, a = a, b = b, untilT = os.clock() + CONFIG.TRIPWIRE_LIFE })
+end
+
+-- Палач у отрезка растяжки (по горизонтали r, по высоте h)
+function SK.nearSegment(pos, a, b, r, h)
+	if math.abs(pos.Y - (a.Y + 3)) > h then return false end
+	local ab = Vector3.new(b.X - a.X, 0, b.Z - a.Z)
+	local ap = Vector3.new(pos.X - a.X, 0, pos.Z - a.Z)
+	local t = math.clamp(ap:Dot(ab) / math.max(ab:Dot(ab), 1e-6), 0, 1)
+	return (ap - ab * t).Magnitude <= r
+end
+
+-- удар Палача ломает станции перед ним
+function SK.hitDevices(hrp)
+	local look = SK.flatLook(hrp)
+	for i = #SK.devices, 1, -1 do
+		local d = SK.devices[i]
+		if d.kind ~= "wire" then
+			local delta = d.pos - hrp.Position
+			local flat = Vector3.new(delta.X, 0, delta.Z)
+			if flat.Magnitude <= CONFIG.KILLER_RANGE and (flat.Magnitude < 1 or flat.Unit:Dot(look) > 0.2) then
+				burst(d.body, Color3.fromRGB(255, 140, 60), nil, 40)
+				announce("Палач сломал станцию!", "bad", d.owner)
+				SK.removeDevice(i)
+			end
+		end
+	end
+end
+
+function SK.tick(now, dt)
+	for p, st in pairs(SK.state) do
+		local e = entryOf[p]
+		if not e or e.status ~= "alive" or p.Parent ~= Players then
+			SK.reset(p)
+		else
+			if st.guard and now >= st.guard.untilT then SK.endGuard(p) end
+			local ch = st.channel
+			if ch then
+				if ch.kind == "selfheal" then
+					local hum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
+					if hum and hum.Health > 0 then
+						hum.Health = math.min(hum.MaxHealth, hum.Health + CONFIG.SELFHEAL_AMOUNT / ch.dur * dt)
+					end
+				end
+				if now >= ch.untilT then SK.endChannel(p, "done") end
+			end
+			if st.manaMax then -- мана Феликса копится сама
+				st.mana = math.min(st.manaMax, st.mana + CONFIG.MANA_REGEN * dt)
+				local shown = math.floor(st.mana)
+				if shown ~= st.manaShown then
+					st.manaShown = shown
+					p:SetAttribute("Mana", shown)
+				end
+			end
+		end
+	end
+	local _, khrp = killerAlive()
+	for i = #SK.devices, 1, -1 do
+		local d = SK.devices[i]
+		if now >= d.untilT or not d.model.Parent then
+			SK.removeDevice(i)
+		elseif d.kind == "wire" then
+			if khrp and SK.nearSegment(khrp.Position, d.a, d.b, 1.8, 4) then
+				SK.slowKiller(CONFIG.TRIPWIRE_SLOW, CONFIG.TRIPWIRE_TIME)
+				burst(khrp, Color3.fromRGB(200, 200, 190), nil, 30)
+				announce("Палач задел растяжку!", "good", d.owner)
+				SK.removeDevice(i)
+			end
+		else
+			for _, e in ipairs(survivorList) do
+				if e.status == "alive" then
+					local c = e.player.Character
+					local hrp = c and c:FindFirstChild("HumanoidRootPart")
+					local hum = c and c:FindFirstChildOfClass("Humanoid")
+					if hrp and hum and hum.Health > 0 and (hrp.Position - d.pos).Magnitude <= CONFIG.STATION_RADIUS then
+						if d.kind == "heal" then
+							hum.Health = math.min(hum.MaxHealth, hum.Health + CONFIG.STATION_HEAL * dt)
+						else
+							SK.stationBoost[e.player] = now + 0.3
+						end
+					end
+				end
+			end
+		end
+	end
+end
+
+-- сброс навыков игрока (смерть, побег, конец матча)
+function SK.reset(p)
+	local st = SK.state[p]
+	if st then
+		if st.guard then SK.endGuard(p) end
+		if st.channel then
+			local ch = st.channel
+			st.channel = nil
+			if ch.prompt then ch.prompt:Destroy() end
+			SK.glow(p.Character, nil)
+		end
+	end
+	SK.state[p] = nil
+	SK.stationBoost[p] = nil
+	local char = p.Character
+	for _, n in ipairs({ "P2D_Bat", "P2D_Camera", "P2D_Shield" }) do
+		local x = char and char:FindFirstChild(n)
+		if x then x:Destroy() end
+	end
+end
+
+function SK.resetAll()
+	for p in pairs(SK.state) do SK.reset(p) end
+	for i = #SK.devices, 1, -1 do SK.removeDevice(i) end
+	SK.stationBoost = {}
+	fx.slows = {}
+end
+
+-- настройка навыков выжившего на старте матча
+function SK.setup(p, c, readyAt)
+	SK.state[p] = nil
+	local st = SK.get(p)
+	for slot = 1, 2 do
+		SK.setReady(p, slot, readyAt)
+		SK.setActive(p, slot, 0)
+	end
+	p:SetAttribute("Skill1Broken", nil)
+	if c.mana then
+		st.mana, st.manaMax = c.mana, c.mana
+		p:SetAttribute("MaxMana", c.mana)
+		p:SetAttribute("Mana", c.mana)
+	else
+		p:SetAttribute("MaxMana", nil)
+		p:SetAttribute("Mana", nil)
+	end
+end
+
+-- обработчики: возвращают true (перезарядка с этого момента), "guard"/"channel" (свои правила) или nil (не сработало)
+SK.use.punch = function(_, e, char, _, hrp)
+	burst(hrp, Color3.fromRGB(255, 220, 60), nil, 30)
+	SK.swish(hrp)
+	local kchar, khrp = SK.inFront(hrp, CONFIG.PUNCH_RANGE, 0.35)
+	if kchar and clearLine(hrp.Position, khrp.Position, { char, kchar }) then
+		stunKiller(CONFIG.PUNCH_STUN, e.name)
+	end
+	return true
+end
+
+SK.use.counter = function(p, _, _, _, _, sk, slot)
+	SK.startGuard(p, "counter", sk.dur, slot)
+	return "guard"
+end
+
+SK.use.godeye = function(p, _, _, _, _, sk)
+	SK.get(p).noSprintUntil = os.clock() + sk.dur
+	fxEvent:FireClient(p, "godseye", sk.dur)
+	return true
+end
+
+SK.use.adrenaline = function(p, _, _, _, hrp, sk)
+	local st = SK.get(p)
 	local now = os.clock()
-	if ab.id == "flash" then
+	st.adrenalineUntil = now + sk.dur
+	st.windedUntil = now + sk.dur + CONFIG.ADRENALINE_WINDED
+	burst(hrp, Color3.fromRGB(255, 60, 60), nil, 40)
+	fxEvent:FireClient(p, "adrenaline", sk.dur)
+	return true
+end
+
+SK.use.heal = function(p, e, _, _, _, sk, slot)
+	SK.startChannel(p, e, "heal", sk.dur, slot)
+	return "channel"
+end
+
+SK.use.selfheal = function(p, e, _, _, _, sk, slot)
+	SK.startChannel(p, e, "selfheal", sk.dur, slot)
+	return "channel"
+end
+
+SK.use.station = function(p, _, _, _, hrp, sk, _, kind)
+	if kind ~= "heal" and kind ~= "speed" then return nil end -- выбор ЛКМ/ПКМ приходит с клиента
+	SK.placeStation(p, kind, hrp, sk.dur)
+	return true
+end
+
+SK.use.tripwire = function(p, _, _, _, hrp)
+	SK.placeWire(p, hrp)
+	return true
+end
+
+SK.use.bat = function(p, e, char, _, hrp)
+	local st = SK.get(p)
+	if st.batBroken then return nil end
+	st.windupUntil = os.clock() + CONFIG.BAT_WINDUP
+	local bat = SK.handProp(char, "P2D_Bat", Vector3.new(0.4, 3.4, 0.4), CFrame.new(0, -0.4, -1.4) * CFrame.Angles(math.rad(-75), 0, 0),
+		Color3.fromRGB(176, 124, 72), M.Wood)
+	fxEvent:FireClient(p, "windup", CONFIG.BAT_WINDUP)
+	task.delay(CONFIG.BAT_WINDUP, function()
+		if bat then Debris:AddItem(bat, 0.35) end
+		if not matchActive or e.status ~= "alive" or not hrp.Parent then return end
+		SK.swish(hrp)
+		local kchar, khrp = SK.inFront(hrp, CONFIG.BAT_RANGE, 0.3)
+		if not kchar or not clearLine(hrp.Position, khrp.Position, { char, kchar }) then return end
+		if SK.killerFaces(khrp, hrp.Position, 0.45) then
+			-- попадание в лицо: бита ломается до конца матча, Палач оглушён
+			st.batBroken = true
+			p:SetAttribute("Skill1Broken", true)
+			burst(khrp, Color3.fromRGB(176, 124, 72), nil, 50)
+			if bat then bat:Destroy() end
+			fxEvent:FireClient(p, "batbroke")
+			stunKiller(CONFIG.BAT_STUN, e.name)
+		else
+			SK.slowKiller(CONFIG.BAT_SLOW, CONFIG.BAT_SLOW_TIME)
+			fxEvent:FireClient(p, "bathit")
+		end
+	end)
+	return true
+end
+
+SK.use.flash = function(p, e, char, _, hrp)
+	local cam = SK.handProp(char, "P2D_Camera", Vector3.new(0.9, 0.7, 0.5), CFrame.new(0, -0.5, -0.6), Color3.fromRGB(40, 40, 46), M.SmoothPlastic)
+	task.delay(0.25, function()
+		if cam then Debris:AddItem(cam, 0.5) end
+		if not matchActive or e.status ~= "alive" or not hrp.Parent then return end
 		local head = char:FindFirstChild("Head") or hrp
 		local l = pointLight(head, WHITE, 36, 14)
 		Debris:AddItem(l, 0.18)
 		burst(hrp, WHITE, nil, 60)
-		local kchar, khrp = killerAlive()
-		if kchar then
-			local d = khrp.Position - hrp.Position
-			if d.Magnitude <= CONFIG.FLASH_RANGE and d.Magnitude > 0 and d.Unit:Dot(hrp.CFrame.LookVector) > 0.55
-				and clearLine(head.Position, khrp.Position, { char, kchar }) then
-				if stunKiller(2.5, e.name) then fxEvent:FireClient(killer, "flashed") end
-			end
+		local kchar, khrp = SK.inFront(hrp, CONFIG.FLASH_RANGE, 0.5)
+		if kchar and SK.killerFaces(khrp, hrp.Position, 0.2) and clearLine(head.Position, khrp.Position, { char, kchar }) then
+			fxEvent:FireClient(killer, "blinded", CONFIG.FLASH_BLIND)
+			announce("Палач ослеплён вспышкой!", "good", p)
 		end
-	elseif ab.id == "punch" then
-		burst(hrp, Color3.fromRGB(255, 220, 60), nil, 30)
-		local kchar, khrp = killerAlive()
-		if kchar then
-			local d = khrp.Position - hrp.Position
-			if d.Magnitude <= CONFIG.PUNCH_RANGE and d.Magnitude > 0 and d.Unit:Dot(hrp.CFrame.LookVector) > 0.3 then
-				stunKiller(3.5, e.name)
-			end
-		end
-	elseif ab.id == "heal" then
-		burst(hrp, Color3.fromRGB(80, 255, 140), nil, 50)
-		hum.Health = math.min(hum.MaxHealth, hum.Health + 15)
-		for _, o in ipairs(survivorList) do
-			if o ~= e and o.status == "alive" then
-				local oc = o.player.Character
-				local oh = oc and oc:FindFirstChildOfClass("Humanoid")
-				local orp = oc and oc:FindFirstChild("HumanoidRootPart")
-				if oh and orp and oh.Health > 0 and (orp.Position - hrp.Position).Magnitude <= CONFIG.SUPPORT_RADIUS then
-					oh.Health = math.min(oh.MaxHealth, oh.Health + 35)
-					fxEvent:FireClient(o.player, "healed", e.name)
-				end
-			end
-		end
-	elseif ab.id == "boombox" then
-		burst(hrp, Color3.fromRGB(80, 255, 140), nil, 50)
-		for _, o in ipairs(survivorList) do
-			if o.status == "alive" then
-				local orp = o.player.Character and o.player.Character:FindFirstChild("HumanoidRootPart")
-				if orp and (orp.Position - hrp.Position).Magnitude <= CONFIG.SUPPORT_RADIUS then
-					local s = stamina[o.player]
-					if s then
-						s.value = s.max
-						s.exhausted = false
-					end
-					boostUntil[o.player] = now + ab.dur
-					if o ~= e then fxEvent:FireClient(o.player, "boost", e.name) end
-				end
-			end
-		end
-	elseif ab.id == "bandage" then
-		fx.bandage[p] = now + ab.dur
-	elseif ab.id == "smoke" then
-		local cloud = mk(Workspace, "SmokeCloud", Vector3.new(6, 1, 6), hrp.Position - Vector3.new(0, 2, 0), BLACK, M.SmoothPlastic,
-			{ Transparency = 1, CanCollide = false, CanQuery = false, CanTouch = false })
-		local pe = Instance.new("ParticleEmitter")
-		pe.Texture = "rbxasset://textures/particles/smoke_main.dds"
-		pe.Rate = 45
-		pe.Lifetime = NumberRange.new(3, 5)
-		pe.Speed = NumberRange.new(2, 6)
-		pe.SpreadAngle = Vector2.new(180, 180)
-		pe.Size = NumberSequence.new({ NumberSequenceKeypoint.new(0, 6), NumberSequenceKeypoint.new(1, 14) })
-		pe.Transparency = NumberSequence.new({ NumberSequenceKeypoint.new(0, 0.2), NumberSequenceKeypoint.new(1, 1) })
-		pe.Color = ColorSequence.new(Color3.fromRGB(150, 150, 150))
-		pe.RotSpeed = NumberRange.new(-20, 20)
-		pe.Parent = cloud
-		task.delay(5, function() pe.Enabled = false end)
-		Debris:AddItem(cloud, 11)
-		boostUntil[p] = now + ab.dur
-	end
+	end)
+	return true
 end
 
+SK.use.telekinesis = function(p, _, char, _, hrp, _, _, aim)
+	local st = SK.get(p)
+	if (st.mana or 0) < 5 then
+		fxEvent:FireClient(p, "nomana")
+		return nil
+	end
+	local dir = (typeof(aim) == "Vector3" and aim.Magnitude > 0.5 and aim.Magnitude < 1.5) and aim.Unit or hrp.CFrame.LookVector
+	local from = hrp.Position + Vector3.new(0, 1.5, 0)
+	local params = RaycastParams.new()
+	params.FilterType = Enum.RaycastFilterType.Exclude
+	params.FilterDescendantsInstances = { char }
+	local res = Workspace:Raycast(from, dir * CONFIG.TK_RANGE, params)
+	local endPos = res and res.Position or (from + dir * CONFIG.TK_RANGE)
+	local hit = false
+	local kchar, khrp = killerAlive()
+	if kchar then
+		if res and res.Instance and res.Instance:IsDescendantOf(kchar) then
+			hit = true
+		else
+			-- снисхождение к прицелу: Палач не дальше 2.5 м от линии прицела (по горизонтали) и в прямой видимости
+			local d = khrp.Position - hrp.Position
+			local flatD = Vector3.new(d.X, 0, d.Z)
+			local flatDir = Vector3.new(dir.X, 0, dir.Z)
+			if flatDir.Magnitude > 0.1 and math.abs(d.Y) < 8 then
+				local along = flatD:Dot(flatDir.Unit)
+				local lateral = (flatD - flatDir.Unit * along).Magnitude
+				if along > 0 and along <= CONFIG.TK_RANGE and lateral <= 2.5 and clearLine(from, khrp.Position, { char, kchar }) then
+					hit = true
+					endPos = khrp.Position
+				end
+			end
+		end
+	end
+	local pct = math.floor(st.mana)
+	st.mana = 0
+	local bolt = beam(Workspace, "P2D_TKBolt", from, endPos, 0.5, Color3.fromRGB(120, 170, 255), M.Neon,
+		{ CanCollide = false, CanQuery = false, CanTouch = false, CastShadow = false })
+	if bolt then Debris:AddItem(bolt, 0.25) end
+	if hit then
+		SK.slowKiller(pct / 100, CONFIG.TK_SLOW_TIME)
+		burst(khrp, Color3.fromRGB(120, 170, 255), nil, 50)
+		fxEvent:FireClient(p, "tkhit", pct)
+	end
+	return true
+end
+
+SK.use.shield = function(p, _, _, _, _, sk, slot)
+	SK.startGuard(p, "shield", sk.dur, slot)
+	return "guard"
+end
+
+------------------------------------------------------------------------
+-- ПАЛАЧ: оружие и навык (Q)
+------------------------------------------------------------------------
 local function giveKillerTool(player, hum)
 	local tool = Instance.new("Tool")
 	tool.ToolTip = "Нажми, чтобы ударить"
@@ -2953,6 +3528,7 @@ local function giveKillerTool(player, hum)
 		local char = player.Character
 		local hrp = char and char:FindFirstChild("HumanoidRootPart")
 		if not hrp then return end
+		SK.hitDevices(hrp)
 		for _, e in ipairs(survivorList) do
 			if e.status == "alive" then
 				local c = e.player.Character
@@ -2962,6 +3538,7 @@ local function giveKillerTool(player, hum)
 					local delta = r.Position - hrp.Position
 					if delta.Magnitude > 0 and delta.Magnitude <= CONFIG.KILLER_RANGE
 						and delta.Unit:Dot(hrp.CFrame.LookVector) > 0.3 then
+						if SK.tryBlock(e) then break end -- контр-удар / щит: урона нет, Палач оглушён
 						h:TakeDamage(CONFIG.KILLER_DAMAGE) -- ускорение выдаст watchDamage
 						fxEvent:FireClient(e.player, "hit")
 						fxEvent:FireClient(player, "landed")
@@ -2988,6 +3565,7 @@ local function setupKiller()
 	applyLook(char, killerChar)
 	hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
 	hum.WalkSpeed = CONFIG.KILLER_SPEED * killerMods.speed
+	noJump(hum)
 	initStamina(killer, true, killerMods)
 	watchDamage(killer, hum)
 	if not hrp:FindFirstChild("KillerAura") then
@@ -2998,7 +3576,7 @@ local function setupKiller()
 		aura.Brightness = 1.5
 		aura.Parent = hrp
 	end
-	if killerChar.ability.id == "dash" and not hrp:FindFirstChild("DashTrail") then
+	if killerChar.skills[1].id == "dash" and not hrp:FindFirstChild("DashTrail") then
 		local a0 = Instance.new("Attachment")
 		a0.Position = Vector3.new(0, 1, 0)
 		a0.Parent = hrp
@@ -3019,9 +3597,8 @@ local function setupKiller()
 	giveKillerTool(killer, hum)
 end
 
-local function killerAbility(p, char)
+local function killerAbility(p, char, ab)
 	if os.clock() < fx.stunUntil then return false end
-	local ab = killerChar.ability
 	if ab.id == "dash" then
 		fx.dashUntil = os.clock() + ab.dur
 		local trail = char:FindFirstChild("DashTrail", true)
@@ -3048,28 +3625,49 @@ local function killerAbility(p, char)
 	return true
 end
 
-abilityEvent.OnServerEvent:Connect(function(p)
+-- клиент: (номер навыка 1|2, доп. данные: "heal"/"speed" для станции, направление прицела для телекинеза)
+abilityEvent.OnServerEvent:Connect(function(p, slot, arg)
 	if not matchActive then return end
+	slot = (slot == 2) and 2 or 1
 	local char = p.Character
 	local hum = char and char:FindFirstChildOfClass("Humanoid")
 	local hrp = char and char:FindFirstChild("HumanoidRootPart")
 	if not hum or not hrp or hum.Health <= 0 then return end
 	local now = serverNow()
-	if now < (p:GetAttribute("AbilityReadyAt") or math.huge) then return end
-	local c, ok
 	if p == killer and killerChar then
-		c = killerChar
-		ok = killerAbility(p, char)
-	else
-		local e = entryOf[p]
-		if not e or e.status ~= "alive" then return end
-		c = e.char
-		survivorAbility(p, e, char, hum, hrp)
-		ok = true
+		local ab = killerChar.skills[1]
+		if slot ~= 1 or now < (p:GetAttribute("Skill1ReadyAt") or math.huge) then return end
+		if killerAbility(p, char, ab) then
+			SK.setReady(p, 1, now + ab.cd)
+			SK.setActive(p, 1, now + (ab.dur or 0))
+		end
+		return
 	end
-	if ok then
-		p:SetAttribute("AbilityReadyAt", now + c.ability.cd)
-		p:SetAttribute("AbilityUntil", now + (c.ability.dur or 0))
+	local e = entryOf[p]
+	if not e or e.status ~= "alive" then return end
+	local sk = e.char.skills and e.char.skills[slot]
+	if not sk then return end
+	local st = SK.get(p)
+	-- повторное нажатие: сбросить щит (с отталкиванием) или выйти из позы лечения
+	if st.guard then
+		if st.guard.slot == slot and st.guard.kind == "shield" then SK.releaseShield(p, hrp) end
+		return
+	end
+	if st.channel then
+		if st.channel.slot == slot and st.channel.kind == "heal" then SK.endChannel(p, "cancel") end
+		return
+	end
+	if now < (p:GetAttribute("Skill" .. slot .. "ReadyAt") or math.huge) or p:GetAttribute("Skill" .. slot .. "Broken") then return end
+	local fn = SK.use[sk.id]
+	if not fn then return end
+	local res = fn(p, e, char, hum, hrp, sk, slot, arg)
+	if res == true then
+		SK.setReady(p, slot, now + sk.cd)
+		SK.setActive(p, slot, now + (sk.dur or 0))
+	elseif res == "guard" then
+		SK.setReady(p, slot, now + sk.cd)
+	elseif res == "channel" then
+		SK.setReady(p, slot, now + sk.dur + sk.cd) -- уточнится, когда поза/самолечение закончится
 	end
 end)
 
@@ -3105,8 +3703,14 @@ local function returnAllToLobby()
 		p:SetAttribute("Status", nil)
 		p:SetAttribute("Role", nil)
 		p:SetAttribute("Port", nil)
-		p:SetAttribute("AbilityReadyAt", nil)
-		p:SetAttribute("AbilityUntil", nil)
+		for slot = 1, 2 do
+			p:SetAttribute("Skill" .. slot .. "ReadyAt", nil)
+			p:SetAttribute("Skill" .. slot .. "Until", nil)
+		end
+		p:SetAttribute("Skill1Broken", nil)
+		p:SetAttribute("Mana", nil)
+		p:SetAttribute("MaxMana", nil)
+		p:SetAttribute("NoSprint", nil)
 		p:SetAttribute("StunnedUntil", nil)
 		p:SetAttribute("Kills", nil)
 		pcall(function() p.ReplicationFocus = nil end)
@@ -3289,9 +3893,8 @@ local function freezePlayers(on, only)
 		if not only or only[p] then
 			local hum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
 			if hum then
-				hum.WalkSpeed = on and 0 or 16
-				hum.JumpPower = on and 0 or 50
-				hum.JumpHeight = on and 0 or 7.2
+				hum.WalkSpeed = on and 0 or CONFIG.SURVIVOR_SPEED
+				noJump(hum)
 			end
 		end
 	end
@@ -3458,12 +4061,11 @@ local function cleanupMatchState()
 	matchActive = false
 	if fx.vanishSaved then setVanish(false) end
 	fx.dashUntil, fx.vanishUntil, fx.stunUntil, fx.stunImmuneUntil = 0, 0, 0, 0
-	fx.bandage = {}
+	SK.resetAll()
 	for _, c in ipairs(matchConns) do c:Disconnect() end
 	matchConns = {}
 	for p in pairs(stamina) do clearStamina(p) end
 	boostUntil = {}
-	gameState:SetAttribute("ExitName", "")
 end
 
 local function runMatch(mapKey)
@@ -3517,8 +4119,7 @@ local function runMatch(mapKey)
 		it.player:SetAttribute("Status", "alive")
 		it.player:SetAttribute("Role", "Survivor")
 		it.player:SetAttribute("Port", it.port)
-		it.player:SetAttribute("AbilityReadyAt", firstAbility)
-		it.player:SetAttribute("AbilityUntil", 0)
+		SK.setup(it.player, it.char, firstAbility)
 	end
 	if killer then
 		killer:SetAttribute("InMatch", true)
@@ -3526,8 +4127,10 @@ local function runMatch(mapKey)
 		killer:SetAttribute("Role", "Killer")
 		killer:SetAttribute("Port", nil)
 		killer:SetAttribute("Kills", 0)
-		killer:SetAttribute("AbilityReadyAt", serverNow() + CONFIG.KILLER_FIRST_ABILITY)
-		killer:SetAttribute("AbilityUntil", 0)
+		SK.setReady(killer, 1, serverNow() + CONFIG.KILLER_FIRST_ABILITY)
+		SK.setActive(killer, 1, 0)
+		killer:SetAttribute("Skill2ReadyAt", nil)
+		killer:SetAttribute("MaxMana", nil)
 		killer:SetAttribute("StunnedUntil", 0)
 	end
 
@@ -3537,7 +4140,6 @@ local function runMatch(mapKey)
 	gameState:SetAttribute("MapKey", mapKey)
 	resetEscapes(def)
 	gameState:SetAttribute("EscapeOpen", false)
-	gameState:SetAttribute("ExitName", "")
 	gameState:SetAttribute("TimeLeft", matchTime)
 	publishRoster()
 
@@ -3558,9 +4160,10 @@ local function runMatch(mapKey)
 			setRootAnchored(e.player, false)
 			applyLook(char, e.char)
 			hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
-			hum.MaxHealth = CONFIG.SURVIVOR_HEALTH * mods.hp
+			hum.MaxHealth = mods.hp
 			hum.Health = hum.MaxHealth
 			hum.WalkSpeed = CONFIG.SURVIVOR_SPEED * mods.speed
+			noJump(hum)
 			addFlashlight(char)
 			initStamina(e.player, false, mods)
 			watchDamage(e.player, hum)
@@ -3597,8 +4200,7 @@ local function runMatch(mapKey)
 			local e = openRandomEscape(def) -- открывается ОДИН случайный выход
 			gameState:SetAttribute("EscapeOpen", true)
 			gameState:SetAttribute("ExitPos", e.zone.Position)
-			gameState:SetAttribute("ExitName", e.label)
-			announce("ОТКРЫТ ВЫХОД: " .. e.label, "warn")
+			announce("ВЫХОД ОТКРЫТ! Ищи значок двери", "warn")
 		end
 		checkEscapes(def)
 
@@ -3670,6 +4272,8 @@ end)
 local function onPlayerAdded(p)
 	p:SetAttribute("InMatch", false)
 	p.CharacterAdded:Connect(function(char)
+		local hum = char:WaitForChild("Humanoid", 5)
+		if hum then noJump(hum) end
 		local ph = gameState:GetAttribute("Phase")
 		if (ph == "Selection" or ph == "Starting") and selRoles[p] then
 			task.wait(0.3)
@@ -3691,7 +4295,7 @@ Players.PlayerRemoving:Connect(function(p)
 	end
 	stamina[p] = nil
 	boostUntil[p] = nil
-	fx.bandage[p] = nil
+	SK.reset(p)
 	local picked = pickOf[p]
 	if picked then
 		picks[picked] = nil

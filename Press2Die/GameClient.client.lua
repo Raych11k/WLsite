@@ -330,12 +330,24 @@ local ICON = {
 	ghost = { "..####..", ".######.", "#xx##xx#", "#xx##xx#", "########", "########", "########", "#.#..#.#" },
 	arrow = { "...#...", "..###..", ".#####.", "#######", "..###..", "..###..", "..###.." },
 	lock = { ".###.", "#...#", "#...#", "#####", "##.##", "##.##", "#####" },
+	counter = { "...#....", "..##....", ".#######", "########", ".#######", "..##...#", "...#...#", ".......#" },
+	godeye = { "#...#...#", ".#.....#.", "..#####..", ".##ooo##.", "##oo#oo##", ".##ooo##.", "..#####.." },
+	pulse = { "....#....", "...##....", "...#.#...", "####.#.##", ".....#.#.", ".....##..", ".....#..." },
+	medkit = { "..###..", "#######", "###o###", "##ooo##", "###o###", "#######" },
+	station = { "..ooo..", "..ooo..", "#######", "#.#.#.#", "#######", ".#...#.", ".#...#." },
+	wire = { "#.......#", "#.......#", "#########", "#.......#", "#.......#" },
+	bat = { "......##", ".....###", "....###.", "...###..", "..###...", ".##.....", "##......", "#......." },
+	orb = { "#.....#", "..###..", ".#ooo#.", ".#ooo#.", ".#ooo#.", "..###..", "#.....#" },
+	bubble = { "..###..", ".#...#.", "#.....#", "#..o..#", "#.....#", ".#...#.", "..###.." },
+	mana = { "..#..", ".#o#.", "#ooo#", ".#o#.", "..#.." },
 }
 local ROLE_ICON = { stun = "star", support = "cross", lone = "shield", killer = "skull" }
 local ABILITY_ICON = {
-	flash = "camera", punch = "fist", heal = "cross", boombox = "note", bandage = "bandage",
-	smoke = "cloud", dash = "dash", reveal = "eye", vanish = "ghost",
+	punch = "fist", counter = "counter", bat = "bat", flash = "camera", heal = "cross", selfheal = "medkit",
+	station = "station", tripwire = "wire", godeye = "godeye", adrenaline = "pulse", telekinesis = "orb", shield = "bubble",
+	dash = "dash", reveal = "eye", vanish = "ghost",
 }
+C.mana = Color3.fromRGB(120, 150, 255)
 
 ------------------------------------------------------------------------
 -- ЭКРАННЫЕ ЭФФЕКТЫ: виньетка, сканлайны, вспышки, помехи, ЭЛТ-выключение
@@ -533,94 +545,107 @@ local function portrait(parent, c, z, dead)
 	local SKIN = Color3.fromRGB(242, 198, 160)
 	local id = c.id
 	if id == "alex" then
-		local hair = Color3.fromRGB(255, 140, 30)
-		px(0.5, 0.95, 0.8, 0.3, Color3.fromRGB(40, 110, 230), UDim.new(0.4, 0))
-		px(0.36, 0.92, 0.05, 0.3, C.ink, nil, 40)
-		for _, a in ipairs({ -62, -31, 0, 31, 62 }) do
-			local r = math.rad(a)
-			px(0.5 + math.sin(r) * 0.3, 0.48 - math.cos(r) * 0.3, 0.13, 0.3, hair, nil, a)
-		end
-		px(0.5, 0.5, 0.56, 0.56, SKIN, R)
-		px(0.44, 0.26, 0.34, 0.1, hair, UDim.new(0.5, 0), -12)
-		eyes(0.5, 0.1, 0.13)
-		px(0.5, 0.68, 0.12, 0.03, Color3.fromRGB(140, 50, 50), UDim.new(0.5, 0))
-		px(0.66, 0.88, 0.18, 0.12, Color3.fromRGB(44, 44, 48), UDim.new(0.2, 0))
-		px(0.6, 0.85, 0.04, 0.03, roleColor(c))
-	elseif id == "aisha" then
-		local hair = Color3.fromRGB(36, 22, 18)
+		-- уличный боец: красная повязка с хвостами, бинты на кулаке, серьёзные брови
 		local band = Color3.fromRGB(220, 30, 30)
-		for i, d in ipairs({ 0.2, 0.16, 0.13 }) do px(0.66 + i * 0.07, 0.24 - i * 0.06, d, d, hair, R) end
-		px(0.5, 0.95, 0.78, 0.3, Color3.fromRGB(240, 120, 30), UDim.new(0.4, 0))
-		px(0.5, 0.5, 0.54, 0.56, Color3.fromRGB(176, 124, 92), R)
-		px(0.5, 0.33, 0.56, 0.08, band)
-		px(0.8, 0.38, 0.2, 0.05, band, nil, 25)
-		px(0.82, 0.45, 0.17, 0.05, band, nil, 45)
-		px(0.41, 0.44, 0.12, 0.035, hair, nil, 18)
-		px(0.59, 0.44, 0.12, 0.035, hair, nil, -18)
-		eyes(0.52, 0.1, 0.11)
-		px(0.5, 0.68, 0.12, 0.03, Color3.fromRGB(120, 40, 40))
-		px(0.18, 0.86, 0.3, 0.26, band, UDim.new(0.4, 0))
-		px(0.18, 0.78, 0.26, 0.05, Color3.fromRGB(255, 120, 120), UDim.new(0.5, 0))
+		px(0.5, 0.96, 0.92, 0.3, Color3.fromRGB(36, 36, 42), UDim.new(0.35, 0))
+		px(0.5, 0.52, 0.56, 0.58, SKIN, R)
+		px(0.5, 0.3, 0.58, 0.22, Color3.fromRGB(34, 26, 22), UDim.new(0.5, 0))
+		for _, a in ipairs({ -30, 0, 30 }) do
+			px(0.5 + math.sin(math.rad(a)) * 0.16, 0.2, 0.1, 0.16, Color3.fromRGB(34, 26, 22), nil, a)
+		end
+		px(0.5, 0.36, 0.6, 0.07, band)
+		px(0.84, 0.4, 0.22, 0.05, band, nil, 22)
+		px(0.86, 0.47, 0.18, 0.05, band, nil, 40)
+		if dead then deadEyes(0.53, 0.1, 0.1) else
+			eyes(0.53, 0.1, 0.11)
+			px(0.4, 0.44, 0.14, 0.035, Color3.fromRGB(30, 22, 18), nil, 20)
+			px(0.6, 0.44, 0.14, 0.035, Color3.fromRGB(30, 22, 18), nil, -20)
+		end
+		px(0.5, 0.7, 0.14, 0.025, Color3.fromRGB(90, 40, 36))
+		px(0.66, 0.6, 0.1, 0.04, Color3.fromRGB(238, 232, 214), nil, -20)
+		px(0.2, 0.86, 0.26, 0.24, Color3.fromRGB(238, 232, 214), UDim.new(0.35, 0))
+		for k = 0, 2 do px(0.2, 0.78 + k * 0.06, 0.26, 0.012, Color3.fromRGB(190, 180, 160)) end
+	elseif id == "aisha" then
+		-- неформалка: розовые волосы и хвостики, пузырь жвачки, джинсовка
+		local pink, violet = Color3.fromRGB(255, 110, 190), Color3.fromRGB(170, 90, 230)
+		px(0.5, 0.52, 0.66, 0.64, pink, R)
+		px(0.16, 0.3, 0.22, 0.22, violet, R)
+		px(0.84, 0.3, 0.22, 0.22, violet, R)
+		px(0.5, 0.96, 0.82, 0.3, Color3.fromRGB(70, 100, 160), UDim.new(0.4, 0))
+		px(0.36, 0.9, 0.1, 0.1, pink, UDim.new(0.3, 0))
+		px(0.5, 0.54, 0.52, 0.54, Color3.fromRGB(205, 150, 120), R)
+		px(0.54, 0.32, 0.5, 0.14, pink, UDim.new(0.5, 0), -12)
+		eyes(0.53, 0.1, 0.12, Color3.fromRGB(140, 60, 160))
+		if not dead then px(0.52, 0.72, 0.16, 0.16, Color3.fromRGB(255, 150, 210), R) end
+		px(0.3, 0.64, 0.08, 0.035, Color3.fromRGB(255, 130, 160), UDim.new(0.5, 0))
+		px(0.7, 0.64, 0.08, 0.035, Color3.fromRGB(255, 130, 160), UDim.new(0.5, 0))
 	elseif id == "lilian" then
-		local pink = Color3.fromRGB(240, 90, 170)
-		px(0.5, 0.52, 0.66, 0.66, pink, R)
-		px(0.22, 0.3, 0.24, 0.24, pink, R)
-		px(0.78, 0.3, 0.24, 0.24, pink, R)
-		px(0.5, 0.95, 0.86, 0.32, Color3.fromRGB(250, 250, 250), UDim.new(0.3, 0))
-		px(0.5, 0.92, 0.2, 0.06, roleColor(c))
-		px(0.5, 0.92, 0.06, 0.18, roleColor(c))
-		px(0.5, 0.52, 0.52, 0.54, SKIN, R)
-		px(0.5, 0.26, 0.32, 0.14, Color3.fromRGB(250, 250, 250), UDim.new(0.2, 0))
-		px(0.5, 0.26, 0.1, 0.03, roleColor(c))
-		px(0.5, 0.26, 0.03, 0.1, roleColor(c))
-		eyes(0.53, 0.1, 0.12, Color3.fromRGB(40, 120, 70))
-		px(0.5, 0.69, 0.1, 0.03, Color3.fromRGB(190, 60, 100), UDim.new(0.5, 0))
+		-- медик: мятная форма, белая шапочка с красным крестом, пучок, румянец
+		local hair = Color3.fromRGB(120, 70, 40)
+		px(0.5, 0.52, 0.64, 0.64, hair, R)
+		px(0.5, 0.14, 0.26, 0.22, hair, R)
+		px(0.5, 0.96, 0.84, 0.3, Color3.fromRGB(110, 220, 200), UDim.new(0.35, 0))
+		px(0.5, 0.88, 0.5, 0.03, Color3.fromRGB(60, 60, 66))
+		px(0.5, 0.54, 0.52, 0.54, SKIN, R)
+		px(0.5, 0.27, 0.36, 0.14, Color3.fromRGB(250, 250, 250), UDim.new(0.2, 0))
+		px(0.5, 0.27, 0.12, 0.035, Color3.fromRGB(220, 40, 40))
+		px(0.5, 0.27, 0.035, 0.1, Color3.fromRGB(220, 40, 40))
+		eyes(0.54, 0.1, 0.12, Color3.fromRGB(40, 120, 70))
+		px(0.31, 0.65, 0.08, 0.035, Color3.fromRGB(255, 150, 160), UDim.new(0.5, 0))
+		px(0.69, 0.65, 0.08, 0.035, Color3.fromRGB(255, 150, 160), UDim.new(0.5, 0))
+		px(0.5, 0.71, 0.1, 0.03, Color3.fromRGB(190, 60, 100), UDim.new(0.5, 0))
 	elseif id == "greg" then
-		local green = Color3.fromRGB(60, 160, 80)
-		px(0.5, 0.95, 0.98, 0.3, green, UDim.new(0.35, 0))
-		px(0.5, 0.86, 0.38, 0.04, C.gold)
-		px(0.5, 0.52, 0.52, 0.54, Color3.fromRGB(200, 150, 110), R)
-		px(0.5, 0.3, 0.52, 0.18, Color3.fromRGB(250, 210, 60), UDim.new(0.5, 0))
-		px(0.5, 0.36, 0.56, 0.04, green)
-		px(0.5, 0.22, 0.7, 0.05, C.ink)
+		-- потрёпанный инженер: комбинезон, гогглы на лбу, щетина, мешки под глазами
+		local skin = Color3.fromRGB(210, 165, 130)
+		px(0.5, 0.96, 0.96, 0.3, Color3.fromRGB(196, 118, 40), UDim.new(0.3, 0))
+		px(0.32, 0.92, 0.06, 0.26, Color3.fromRGB(150, 90, 30))
+		px(0.68, 0.92, 0.06, 0.26, Color3.fromRGB(150, 90, 30))
+		px(0.5, 0.53, 0.54, 0.56, skin, R)
+		for _, t in ipairs({ { 0.34, 0.27, 20 }, { 0.5, 0.24, -10 }, { 0.66, 0.27, -25 } }) do
+			px(t[1], t[2], 0.18, 0.12, Color3.fromRGB(130, 122, 112), UDim.new(0.4, 0), t[3])
+		end
+		px(0.5, 0.36, 0.56, 0.04, Color3.fromRGB(40, 36, 32))
 		for _, sx in ipairs({ -1, 1 }) do
-			px(0.5 + sx * 0.3, 0.52, 0.13, 0.26, C.ink, UDim.new(0.3, 0))
-			px(0.5 + sx * 0.33, 0.52, 0.04, 0.2, roleColor(c))
+			px(0.5 + sx * 0.1, 0.36, 0.13, 0.1, Color3.fromRGB(110, 220, 230), R)
 		end
-		if dead then deadEyes(0.5, 0.09, 0.1) else
-			px(0.5, 0.5, 0.44, 0.1, C.ink, UDim.new(0.2, 0))
-			px(0.4, 0.48, 0.08, 0.025, C.white)
+		if dead then deadEyes(0.52, 0.1, 0.09) else
+			eyes(0.52, 0.1, 0.1)
+			px(0.4, 0.49, 0.13, 0.04, skin:Lerp(C.black, 0.15))
+			px(0.6, 0.49, 0.13, 0.04, skin:Lerp(C.black, 0.15))
 		end
-		px(0.5, 0.63, 0.24, 0.045, Color3.fromRGB(70, 40, 24), UDim.new(0.5, 0))
+		px(0.5, 0.7, 0.38, 0.14, Color3.fromRGB(110, 100, 92), UDim.new(0.45, 0))
+		px(0.52, 0.68, 0.12, 0.025, Color3.fromRGB(90, 40, 36), nil, -8)
 	elseif id == "oscar" then
-		local pad = Color3.fromRGB(230, 110, 30)
-		px(0.5, 0.97, 0.7, 0.28, Color3.fromRGB(120, 80, 50), UDim.new(0.3, 0))
-		px(0.17, 0.84, 0.36, 0.26, pad, UDim.new(0.3, 0))
-		px(0.83, 0.84, 0.36, 0.26, pad, UDim.new(0.3, 0))
-		px(0.17, 0.75, 0.36, 0.04, roleColor(c))
-		px(0.83, 0.75, 0.36, 0.04, roleColor(c))
-		px(0.5, 0.56, 0.42, 0.42, SKIN, R)
-		px(0.5, 0.39, 0.5, 0.2, Color3.fromRGB(230, 190, 40), UDim.new(0.5, 0))
-		px(0.5, 0.46, 0.64, 0.05, Color3.fromRGB(200, 160, 30))
-		px(0.5, 0.36, 0.11, 0.09, Color3.fromRGB(255, 250, 210), R)
-		px(0.5, 0.68, 0.42, 0.24, Color3.fromRGB(90, 56, 30), UDim.new(0.45, 0))
-		if dead then deadEyes(0.55, 0.08, 0.06) else
-			px(0.42, 0.55, 0.06, 0.06, C.ink, R)
-			px(0.58, 0.55, 0.06, 0.06, C.ink, R)
+		-- тихоня: тёмный капюшон, бледное лицо, чёлка закрывает глаз, взгляд в пол
+		local hair = Color3.fromRGB(22, 22, 28)
+		px(0.5, 0.52, 0.72, 0.72, Color3.fromRGB(48, 48, 60), R)
+		px(0.5, 0.96, 0.8, 0.3, Color3.fromRGB(40, 40, 50), UDim.new(0.35, 0))
+		px(0.44, 0.9, 0.02, 0.14, Color3.fromRGB(200, 200, 205))
+		px(0.56, 0.9, 0.02, 0.14, Color3.fromRGB(200, 200, 205))
+		px(0.5, 0.55, 0.52, 0.54, Color3.fromRGB(226, 206, 192), R)
+		px(0.5, 0.33, 0.56, 0.2, hair, UDim.new(0.5, 0))
+		px(0.58, 0.46, 0.24, 0.2, hair, UDim.new(0.3, 0), -22)
+		if dead then deadEyes(0.53, 0.09, 0.08) else
+			px(0.41, 0.53, 0.11, 0.13, C.white, R)
+			px(0.41, 0.57, 0.05, 0.06, C.ink, R)
 		end
+		px(0.41, 0.61, 0.1, 0.02, Color3.fromRGB(150, 130, 150))
+		px(0.5, 0.71, 0.08, 0.02, Color3.fromRGB(120, 80, 80), nil, 6)
 	elseif id == "felix" then
-		local olive = Color3.fromRGB(90, 98, 56)
-		px(0.5, 0.17, 0.66, 0.1, Color3.fromRGB(140, 60, 40), UDim.new(0.5, 0))
-		px(0.82, 0.16, 0.025, 0.3, C.ink)
-		px(0.82, 0.02, 0.06, 0.06, roleColor(c), R)
-		px(0.5, 0.96, 0.78, 0.3, Color3.fromRGB(110, 120, 70), UDim.new(0.4, 0))
-		px(0.5, 0.52, 0.66, 0.66, olive, R)
-		px(0.5, 0.55, 0.5, 0.5, Color3.fromRGB(64, 66, 60), R)
-		for _, sx in ipairs({ -1, 1 }) do
-			px(0.5 + sx * 0.11, 0.5, 0.17, 0.17, C.ink, R)
-			px(0.5 + sx * 0.11, 0.5, 0.11, 0.11, dead and Color3.fromRGB(70, 50, 40) or Color3.fromRGB(255, 140, 40), R)
-		end
-		px(0.5, 0.7, 0.16, 0.14, Color3.fromRGB(40, 42, 40), UDim.new(0.3, 0))
+		-- маг: высокая синяя шляпа со звёздами, светящиеся глаза, плащ, сфера маны
+		local hat = Color3.fromRGB(34, 44, 110)
+		px(0.5, 0.96, 0.86, 0.3, Color3.fromRGB(20, 24, 60), UDim.new(0.35, 0))
+		px(0.5, 0.9, 0.08, 0.1, Color3.fromRGB(90, 150, 255), nil, 45)
+		px(0.5, 0.56, 0.5, 0.5, Color3.fromRGB(214, 214, 230), R)
+		px(0.5, 0.36, 0.76, 0.07, hat, UDim.new(0.5, 0))
+		px(0.5, 0.26, 0.4, 0.14, hat)
+		px(0.53, 0.16, 0.26, 0.1, hat)
+		px(0.58, 0.07, 0.14, 0.1, hat, nil, 20)
+		px(0.5, 0.31, 0.42, 0.03, Color3.fromRGB(90, 150, 255))
+		px(0.42, 0.2, 0.04, 0.04, Color3.fromRGB(255, 220, 90), R)
+		px(0.6, 0.12, 0.035, 0.035, Color3.fromRGB(255, 220, 90), R)
+		eyes(0.56, 0.09, 0.1, dead and C.ink or Color3.fromRGB(60, 140, 255))
+		if not dead then px(0.86, 0.66, 0.14, 0.14, Color3.fromRGB(110, 170, 255), R) end
 	elseif id == "executioner" then
 		local sack = Color3.fromRGB(150, 115, 70)
 		px(0.5, 0.97, 0.98, 0.3, Color3.fromRGB(60, 32, 30), UDim.new(0.3, 0))
@@ -883,11 +908,11 @@ end
 
 ------------------------------------------------------------------------
 -- СВОЙ HUD (слева снизу): анимированная модель над полосами здоровья и выносливости,
--- справа — ячейка способности. Подписей нет: сердце, молния, иконка способности.
+-- справа — две ячейки навыков (Q и E). Подписей нет: сердце, молния, кристалл маны, иконки навыков.
 ------------------------------------------------------------------------
 UI.selfRoot = make("Frame", {
 	Name = "SelfHUD", AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 14, 1, -14),
-	Size = UDim2.fromOffset(470, 262), BackgroundTransparency = 1, Visible = false,
+	Size = UDim2.fromOffset(548, 266), BackgroundTransparency = 1, Visible = false,
 }, gui)
 UI.selfScale = make("UIScale", { Scale = 1 }, UI.selfRoot)
 UI.selfShake = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1 }, UI.selfRoot)
@@ -929,40 +954,76 @@ UI.stText = make("TextLabel", {
 	Font = F.pix, TextSize = 16, TextXAlignment = Enum.TextXAlignment.Right, TextColor3 = C.st,
 	TextStrokeColor3 = C.black, TextStrokeTransparency = 0, Text = "x100",
 }, UI.selfShake)
+-- мана (только у Феликса): кристалл + тонкая полоса
+UI.manaRow = make("Frame", { Position = UDim2.fromOffset(0, 246), Size = UDim2.fromOffset(380, 18), BackgroundTransparency = 1, Visible = false, ZIndex = 4 }, UI.selfShake)
+U.icon(UI.manaRow, ICON.mana, 3, { ["#"] = C.mana, o = C.white }, { Position = UDim2.fromOffset(50, 1), ZIndex = 5 })
+UI.manaBar = U.bar(UI.manaRow, { Position = UDim2.fromOffset(78, 2), Size = UDim2.fromOffset(240, 14), ZIndex = 4 }, 5, C.mana)
+UI.manaBar.ghost.Visible = false
+UI.manaText = make("TextLabel", {
+	Position = UDim2.fromOffset(322, 0), Size = UDim2.fromOffset(50, 18), BackgroundTransparency = 1, ZIndex = 6,
+	Font = F.pix, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Right, TextColor3 = C.mana,
+	TextStrokeColor3 = C.black, TextStrokeTransparency = 0, Text = "x50",
+}, UI.manaRow)
 -- порт игрока (P1..P6) / череп Палача
 UI.portBox, UI.portBody, UI.portEdges = U.panel(UI.selfShake, { Position = UDim2.fromOffset(0, 172), Size = UDim2.fromOffset(38, 38), ZIndex = 4 }, C.panel, C.edge, 2)
 UI.portText = make("TextLabel", {
 	BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 6, Font = F.pix, TextSize = 14, TextColor3 = C.bone, Text = "P1",
 }, UI.portBody)
 UI.portSkull = U.icon(UI.portBody, ICON.skull, 4, { ["#"] = C.red, x = C.ink }, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 6, Visible = false })
+-- значок shift-lock рядом с портом (горит, когда включён)
+UI.lockIcon, UI.lockParts = U.icon(UI.selfShake, ICON.lock, 3, { ["#"] = C.edge }, { Position = UDim2.fromOffset(12, 146), ZIndex = 6 })
 
--- ячейка способности: иконка, затемнение-перезарядка сверху вниз, цифры, клавиша Q
-UI.abBox, UI.abBody, UI.abEdges = U.panel(UI.selfShake, { Position = UDim2.fromOffset(388, 160), Size = UDim2.fromOffset(78, 78), ZIndex = 4 }, C.panel2, C.edge, 4)
-UI.abIconHolder = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 5 }, UI.abBody)
-UI.abShade = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.black, BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = 7 }, UI.abBody)
-UI.abCd = make("TextLabel", {
-	BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 8, Font = F.pix, TextSize = 26,
-	TextColor3 = C.bone, TextStrokeTransparency = 0, Text = "",
-}, UI.abBody)
-UI.abActive = make("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 6), Size = UDim2.new(1, 0, 0, 4),
-	BackgroundColor3 = C.gold, BorderSizePixel = 0, ZIndex = 8, Visible = false }, UI.abBox)
-UI.abKey = U.key(UI.abBox, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(24, 24), ZIndex = 9 }, "Q")
-UI.abIconFor = nil
-local function setAbilityIcon(c)
-	local id = c and c.ability and c.ability.id
-	if id == UI.abIconFor then return end
-	UI.abIconFor = id
-	for _, ch in ipairs(UI.abIconHolder:GetChildren()) do ch:Destroy() end
-	if not id then return end
-	local grid = ICON[ABILITY_ICON[id] or "star"]
-	local px = math.floor(54 / math.max(#grid[1], #grid))
-	U.icon(UI.abIconHolder, grid, px, { ["#"] = roleColor(c), o = C.white, x = C.ink, y = C.gold },
-		{ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 6 })
+-- ячейки навыков: иконка, затемнение-перезарядка сверху вниз, цифры, клавиша; полоса активности снизу
+local SLOT_KEYS = { "Q", "E" }
+UI.slots = {}
+for i = 1, 2 do
+	local sl = {}
+	sl.box, sl.body, sl.edges = U.panel(UI.selfShake, { Position = UDim2.fromOffset(384 + (i - 1) * 82, 164), Size = UDim2.fromOffset(74, 74), ZIndex = 4 }, C.panel2, C.edge, 4)
+	sl.iconHolder = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 5 }, sl.body)
+	sl.shade = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.black, BackgroundTransparency = 0.35, BorderSizePixel = 0, ZIndex = 7 }, sl.body)
+	sl.cd = make("TextLabel", {
+		BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 8, Font = F.pix, TextSize = 24,
+		TextColor3 = C.bone, TextStrokeTransparency = 0, Text = "",
+	}, sl.body)
+	-- «сломано» (бита Айши): красный крест поверх ячейки
+	sl.broken = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundTransparency = 1, ZIndex = 9, Visible = false }, sl.body)
+	for _, rot in ipairs({ 45, -45 }) do
+		make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.new(1.2, 0, 0, 6),
+			Rotation = rot, BackgroundColor3 = C.red, BorderSizePixel = 0, ZIndex = 9 }, sl.broken)
+	end
+	sl.active = make("Frame", { AnchorPoint = Vector2.new(0, 1), Position = UDim2.new(0, 0, 1, 7), Size = UDim2.new(1, 0, 0, 4),
+		BackgroundColor3 = C.gold, BorderSizePixel = 0, ZIndex = 8, Visible = false }, sl.box)
+	sl.key = U.key(sl.box, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromOffset(4, 4), Size = UDim2.fromOffset(24, 24), ZIndex = 10 }, SLOT_KEYS[i])
+	sl.iconFor = nil
+	UI.slots[i] = sl
+end
+local function skillsOf(c)
+	return c and c.skills or {}
+end
+local function skillIcon(parent, sk, c, size, props)
+	local grid = ICON[ABILITY_ICON[sk.id] or "star"]
+	local px = math.max(2, math.floor(size / math.max(#grid[1], #grid)))
+	return U.icon(parent, grid, px, { ["#"] = roleColor(c), o = C.white, x = C.ink, y = C.gold }, props)
+end
+local function setSlotIcons(c)
+	local list = skillsOf(c)
+	for i, sl in ipairs(UI.slots) do
+		local sk = list[i]
+		local id = sk and (c.id .. ":" .. sk.id)
+		sl.box.Visible = sk ~= nil
+		if id ~= sl.iconFor then
+			sl.iconFor = id
+			for _, ch in ipairs(sl.iconHolder:GetChildren()) do ch:Destroy() end
+			if sk then
+				skillIcon(sl.iconHolder, sk, c, 52, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 6 })
+			end
+		end
+	end
 end
 
 -- подсказка управления справа снизу: только клавиши и иконки
 UI.hintRoot = make("Frame", {
-	AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -18, 1, -18), Size = UDim2.fromOffset(260, 30),
+	AnchorPoint = Vector2.new(1, 1), Position = UDim2.new(1, -18, 1, -18), Size = UDim2.fromOffset(420, 30),
 	BackgroundTransparency = 1, Visible = false,
 }, gui)
 UI.hintScale = make("UIScale", { Scale = 1 }, UI.hintRoot)
@@ -975,18 +1036,48 @@ local function hintPair(order, keyText, keyW, iconGrid, colors)
 	return f
 end
 UI.hintRun = hintPair(1, "SHIFT", 58, ICON.bolt, { ["#"] = C.st })
-UI.hintAb = make("Frame", { LayoutOrder = 2, Size = UDim2.fromOffset(60, 28), BackgroundTransparency = 1 }, UI.hintRoot)
-UI.hintHit = hintPair(3, "LMB", 42, ICON.knife, { ["#"] = C.bone, x = C.edge, h = Color3.fromRGB(120, 60, 40) })
-UI.hintAbFor = nil
-local function setHintAbility(c)
-	local id = c and c.ability and c.ability.id
-	if id == UI.hintAbFor then return end
-	UI.hintAbFor = id
-	for _, ch in ipairs(UI.hintAb:GetChildren()) do ch:Destroy() end
-	if not id then return end
-	U.key(UI.hintAb, { Size = UDim2.fromOffset(24, 24), Position = UDim2.fromOffset(0, 2), ZIndex = 2 }, "Q")
-	U.icon(UI.hintAb, ICON[ABILITY_ICON[id] or "star"], 3, { ["#"] = roleColor(c), o = C.white, x = C.ink, y = C.gold },
-		{ AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 29, 0.5, 0), ZIndex = 2 })
+UI.hintSkills = {}
+for i = 1, 2 do
+	UI.hintSkills[i] = make("Frame", { LayoutOrder = 1 + i, Size = UDim2.fromOffset(60, 28), BackgroundTransparency = 1 }, UI.hintRoot)
+end
+UI.hintLock = hintPair(4, "CTRL", 48, ICON.lock, { ["#"] = C.bone })
+UI.hintHit = hintPair(5, "LMB", 42, ICON.knife, { ["#"] = C.bone, x = C.edge, h = Color3.fromRGB(120, 60, 40) })
+UI.hintFor = nil
+local function setHintSkills(c)
+	local id = c and c.id
+	if id == UI.hintFor then return end
+	UI.hintFor = id
+	local list = skillsOf(c)
+	for i, f in ipairs(UI.hintSkills) do
+		for _, ch in ipairs(f:GetChildren()) do ch:Destroy() end
+		local sk = list[i]
+		f.Visible = sk ~= nil
+		if sk then
+			U.key(f, { Size = UDim2.fromOffset(24, 24), Position = UDim2.fromOffset(0, 2), ZIndex = 2 }, SLOT_KEYS[i])
+			skillIcon(f, sk, c, 24, { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 29, 0.5, 0), ZIndex = 2 })
+		end
+	end
+end
+
+-- выбор станции Грега: ЛКМ — лечение, ПКМ — ускорение (на телефоне — тап по кнопке)
+UI.placeRoot = make("Frame", {
+	AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -120), Size = UDim2.fromOffset(300, 70),
+	BackgroundTransparency = 1, Visible = false, ZIndex = 30,
+}, gui)
+UI.placeScale = make("UIScale", { Scale = 1 }, UI.placeRoot)
+UI.placeButtons = {}
+for i, it in ipairs({ { "heal", "LMB", ICON.cross, C.hp }, { "speed", "RMB", ICON.bolt, C.stBoost } }) do
+	local b = make("TextButton", { Position = UDim2.fromOffset((i - 1) * 156, 0), Size = UDim2.fromOffset(144, 70), BackgroundTransparency = 1,
+		AutoButtonColor = false, Text = "", ZIndex = 30 }, UI.placeRoot)
+	local _, body = U.panel(b, { Size = UDim2.fromScale(1, 1), ZIndex = 30 }, C.panel, it[4], 4)
+	U.icon(body, it[3], 5, { ["#"] = it[4] }, { AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.new(0, 14, 0.5, 0), ZIndex = 31 })
+	U.key(body, { AnchorPoint = Vector2.new(1, 0.5), Position = UDim2.new(1, -12, 0.5, 0), Size = UDim2.fromOffset(52, 26), ZIndex = 31 }, it[2])
+	UI.placeButtons[it[1]] = b
+end
+-- забегаем вперёд: логика навыков ниже (там видны все нужные состояния)
+local trySkill, chooseStation
+for kind, b in pairs(UI.placeButtons) do
+	b.Activated:Connect(function() if chooseStation then chooseStation(kind) end end)
 end
 
 -- модель игрока в окне: повторяет стойку/шаг/бег, вздрагивает от урона
@@ -1099,7 +1190,7 @@ local function setBust(on)
 end
 
 ------------------------------------------------------------------------
--- БЕГ: Shift / L3 / кнопка;  СПОСОБНОСТЬ: Q / Y / кнопка (у всех ролей)
+-- БЕГ: Shift / L3 / кнопка. Навыки: Q и E / Y и B / кнопки (логика — в разделе «НАВЫКИ»)
 ------------------------------------------------------------------------
 local sprintHeld = false
 local function setSprint(on)
@@ -1120,27 +1211,7 @@ task.spawn(function()
 	end
 end)
 
-local lastAbilityPress = 0
-local function tryAbility()
-	if gameState:GetAttribute("Phase") ~= "Match" or not player:GetAttribute("InMatch") then return end
-	if player:GetAttribute("Role") ~= "Killer" and player:GetAttribute("Status") ~= "alive" then return end
-	local ready = player:GetAttribute("AbilityReadyAt") or math.huge
-	local now = os.clock()
-	if Workspace:GetServerTimeNow() >= ready and now - lastAbilityPress > 0.4 then
-		lastAbilityPress = now
-		abilityEvent:FireServer()
-		sfx("confirm", 0.45, 0.8)
-		U.edge(UI.abEdges, C.white)
-	else
-		sfx("tick", 0.3, 0.6)
-	end
-end
-ContextActionService:BindAction("HorrorAbility", function(_, state)
-	if state == Enum.UserInputState.Begin then tryAbility() end
-	return Enum.ContextActionResult.Pass
-end, false, Enum.KeyCode.Q, Enum.KeyCode.ButtonY)
-
--- UI.touchSprint, UI.touchAbility — только на сенсорных устройствах
+-- UI.touchSprint, UI.touchSkills — только на сенсорных устройствах
 if UserInputService.TouchEnabled then
 	local function touchButton(pos, size, edge, grid, colors)
 		local b = make("TextButton", {
@@ -1148,17 +1219,24 @@ if UserInputService.TouchEnabled then
 			AutoButtonColor = false, Text = "", Visible = false, ZIndex = 30,
 		}, gui)
 		U.panel(b, { Size = UDim2.fromScale(1, 1), ZIndex = 30 }, C.panel, edge, 4)
-		U.icon(b, grid, math.floor(size * 0.5 / #grid[1]), colors, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 32 })
+		if grid then
+			U.icon(b, grid, math.floor(size * 0.5 / #grid[1]), colors, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 32 })
+		end
 		return b
 	end
 	UI.touchSprint = touchButton(UDim2.new(1, -30, 1, -170), 84, C.st, ICON.bolt, { ["#"] = C.st })
 	UI.touchSprint.MouseButton1Down:Connect(function() setSprint(true) end)
 	UI.touchSprint.MouseButton1Up:Connect(function() setSprint(false) end)
 	UI.touchSprint.MouseLeave:Connect(function() setSprint(false) end)
-	UI.touchAbility = touchButton(UDim2.new(1, -124, 1, -200), 74, C.gold, ICON.star, { ["#"] = C.gold })
-	UI.touchCd = make("TextLabel", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 33, Font = F.pix,
-		TextSize = 24, TextColor3 = C.bone, TextStrokeTransparency = 0, Text = "" }, UI.touchAbility)
-	UI.touchAbility.Activated:Connect(tryAbility)
+	UI.touchSkills = {}
+	for i, pos in ipairs({ UDim2.new(1, -124, 1, -200), UDim2.new(1, -124, 1, -116) }) do
+		local b = touchButton(pos, 74, C.gold, nil, nil)
+		b.Name = "TouchSkill" .. i
+		local cd = make("TextLabel", { BackgroundTransparency = 1, Size = UDim2.fromScale(1, 1), ZIndex = 33, Font = F.pix,
+			TextSize = 24, TextColor3 = C.bone, TextStrokeTransparency = 0, Text = "" }, b)
+		b.Activated:Connect(function() if trySkill then trySkill(i) end end)
+		UI.touchSkills[i] = { button = b, cd = cd, iconFor = nil }
+	end
 end
 
 ------------------------------------------------------------------------
@@ -1243,16 +1321,19 @@ local function showTitleCard()
 	local id = player.Character and player.Character:GetAttribute("CharId")
 	local c = id and charById[id]
 	if c then portraitFrame(UI.roleArt, { Size = UDim2.fromScale(1, 1), ZIndex = 62 }, c, false, 3) end
-	local ab = c and c.ability
-	local abText = ab and ("[Q] " .. ab.name .. " — " .. ab.text) or ""
+	local parts = {}
+	for i, sk in ipairs(c and c.skills or {}) do
+		table.insert(parts, "[" .. (sk.key or (i == 1 and "Q" or "E")) .. "] " .. sk.name)
+	end
+	local abText = table.concat(parts, "   ")
 	if player:GetAttribute("Role") == "Killer" then
 		UI.roleTitle.Text = "ТЫ — " .. upper(c and c.name or "Палач")
 		UI.roleTitle.TextColor3 = C.red
-		UI.roleText.Text = "Не дай никому сбежать. ЛКМ — удар. " .. abText .. ". Каждое убийство добавляет время."
+		UI.roleText.Text = "Не дай никому сбежать. ЛКМ — удар. Каждое убийство добавляет время.\n" .. abText .. "   [CTRL] SHIFT-LOCK"
 	else
 		UI.roleTitle.Text = "ТЫ — " .. upper(c and c.name or "выживший") .. "  ·  " .. roleName(c)
 		UI.roleTitle.TextColor3 = c and roleColor(c) or C.bone
-		UI.roleText.Text = "Продержись: выход откроется за минуту до конца — беги к воротам. " .. abText .. "."
+		UI.roleText.Text = "Продержись: выход откроется за минуту до конца — ищи значок двери.\n" .. abText .. "   [CTRL] SHIFT-LOCK"
 	end
 	U.edge(UI.roleEdges, c and roleColor(c) or C.edge)
 	UI.titleRoot.Visible = true
@@ -1440,7 +1521,7 @@ UI.selBackdrop = make("Frame", {
 make("UIGradient", { Rotation = 90, Transparency = NumberSequence.new({
 	NumberSequenceKeypoint.new(0, 1), NumberSequenceKeypoint.new(0.3, 0.3), NumberSequenceKeypoint.new(1, 0.05) }) }, UI.selBackdrop)
 
-local CELL_W, CELL_H, CELL_GAP, INFO_W, TOP = 150, 206, 14, 320, 66
+local CELL_W, CELL_H, CELL_GAP, INFO_W, TOP = 150, 226, 14, 360, 66
 UI.selPanel = make("Frame", {
 	AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -14), Size = UDim2.fromOffset(1250, TOP + CELL_H + 12),
 	BackgroundTransparency = 1, ZIndex = 41,
@@ -1474,30 +1555,36 @@ UI.infoDesc = make("TextLabel", {
 	Font = F.med, TextSize = 12, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
 	TextColor3 = Color3.fromRGB(210, 206, 200), Text = "",
 }, UI.infoPanel)
--- характеристики: иконка + 5 делений (без слов)
-UI.statRows = {}
-for r = 1, 3 do
-	local y = 92 + (r - 1) * 16
-	local holder = make("Frame", { Position = UDim2.fromOffset(12, y), Size = UDim2.fromOffset(18, 14), BackgroundTransparency = 1, ZIndex = 43 }, UI.infoPanel)
-	local pips = {}
-	for i = 1, 5 do
-		local p = make("Frame", {
-			Position = UDim2.fromOffset(36 + (i - 1) * 30, y + 2), Size = UDim2.fromOffset(26, 10),
-			BackgroundColor3 = Color3.fromRGB(40, 36, 44), BorderSizePixel = 0, ZIndex = 43,
-		}, UI.infoPanel)
-		pips[i] = p
+-- характеристики без слов: сердце/молния/кристалл и число (у Палачей — пипсы силы, скорости, выносливости)
+UI.statChips = {}
+for i = 1, 3 do
+	local chip = {}
+	chip.root = make("Frame", { Position = UDim2.fromOffset(12 + (i - 1) * 110, 92), Size = UDim2.fromOffset(104, 16), BackgroundTransparency = 1, ZIndex = 43 }, UI.infoPanel)
+	chip.icon = make("Frame", { Size = UDim2.fromOffset(18, 16), BackgroundTransparency = 1, ZIndex = 43 }, chip.root)
+	chip.text = make("TextLabel", { Position = UDim2.fromOffset(22, 0), Size = UDim2.fromOffset(60, 16), BackgroundTransparency = 1, ZIndex = 43,
+		Font = F.pix, TextSize = 15, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.bone, TextStrokeTransparency = 0.3, Text = "" }, chip.root)
+	chip.pips = {}
+	for k = 1, 5 do
+		chip.pips[k] = make("Frame", { Position = UDim2.fromOffset(22 + (k - 1) * 14, 3), Size = UDim2.fromOffset(11, 10),
+			BackgroundColor3 = Color3.fromRGB(40, 36, 44), BorderSizePixel = 0, ZIndex = 43 }, chip.root)
 	end
-	UI.statRows[r] = { holder = holder, pips = pips, kind = nil }
+	UI.statChips[i] = chip
 end
--- способность героя
-UI.infoAbBox, UI.infoAbBody, UI.infoAbEdges = U.panel(UI.infoPanel, { Position = UDim2.fromOffset(196, 88), Size = UDim2.fromOffset(40, 40), ZIndex = 43 }, C.panel2, C.edge, 2)
-UI.infoAbility = make("TextLabel", {
-	Position = UDim2.fromOffset(12, 140), Size = UDim2.new(1, -24, 0, 26), BackgroundTransparency = 1, ZIndex = 43,
-	Font = F.bold, TextSize = 11, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
-	TextColor3 = C.gold, Text = "",
-}, UI.infoPanel)
+-- навыки героя: иконка, клавиша и название, описание
+UI.skillRows = {}
+for i = 1, 2 do
+	local row = {}
+	row.root = make("Frame", { Position = UDim2.fromOffset(12, 112 + (i - 1) * 40), Size = UDim2.new(1, -24, 0, 38), BackgroundTransparency = 1, ZIndex = 43 }, UI.infoPanel)
+	row.box, row.body, row.edges = U.panel(row.root, { Size = UDim2.fromOffset(34, 34), ZIndex = 43 }, C.panel2, C.edge, 2)
+	row.title = make("TextLabel", { Position = UDim2.fromOffset(42, 0), Size = UDim2.new(1, -42, 0, 14), BackgroundTransparency = 1, ZIndex = 43,
+		Font = F.bold, TextSize = 12, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.gold, Text = "" }, row.root)
+	row.text = make("TextLabel", { Position = UDim2.fromOffset(42, 14), Size = UDim2.new(1, -42, 0, 24), BackgroundTransparency = 1, ZIndex = 43,
+		Font = F.med, TextSize = 10, TextWrapped = true, TextXAlignment = Enum.TextXAlignment.Left, TextYAlignment = Enum.TextYAlignment.Top,
+		TextColor3 = Color3.fromRGB(200, 196, 190), Text = "" }, row.root)
+	UI.skillRows[i] = row
+end
 UI.confirmBtn = make("TextButton", {
-	Position = UDim2.fromOffset(12, 168), Size = UDim2.new(1, -24, 0, 28), BackgroundTransparency = 1, AutoButtonColor = false,
+	Position = UDim2.fromOffset(12, 192), Size = UDim2.new(1, -24, 0, 24), BackgroundTransparency = 1, AutoButtonColor = false,
 	Text = "", ZIndex = 44,
 }, UI.infoPanel)
 UI.confirmBox, UI.confirmBody, UI.confirmEdges = U.panel(UI.confirmBtn, { Size = UDim2.fromScale(1, 1), ZIndex = 44 }, C.blood, C.ink, 3)
@@ -1510,7 +1597,6 @@ local cursor = 1
 local myPick, myList = nil, nil
 local takenSet, takenBy = {}, {}
 local ROLE_PLURAL = { stun = "СТАННЕРЫ", support = "ПОДДЕРЖКА", lone = "ВЫЖИВАЛЬЩИКИ", killer = "ОБЛИКИ ПАЛАЧА" }
-local STAT_ICONS = { hp = { "heart", C.hpLow }, power = { "fist", C.red }, speed = { "dash", C.gold }, stamina = { "bolt", C.st } }
 local onPhase
 
 local function fitSelection()
@@ -1559,33 +1645,39 @@ local function refreshInfo()
 	UI.infoRole.TextColor3 = rc
 	UI.infoDesc.Text = c.desc or ""
 	U.edge(UI.infoEdges, rc)
-	local kinds = c.killer and { "power", "speed", "stamina" } or { "hp", "speed", "stamina" }
-	for r, row in ipairs(UI.statRows) do
-		local kind = kinds[r]
-		if row.kind ~= kind then
-			row.kind = kind
-			for _, ch in ipairs(row.holder:GetChildren()) do ch:Destroy() end
-			local si = STAT_ICONS[kind]
-			U.icon(row.holder, ICON[si[1]], 2, { ["#"] = si[2], o = C.white }, { ZIndex = 43 })
+	local stats = c.killer and {
+		{ "fist", C.red, c.power or 0, true }, { "dash", C.gold, c.speed or 0, true }, { "bolt", C.st, c.stamina or 0, true },
+	} or { { "heart", C.hpLow, c.hp or 100 }, { "bolt", C.st, c.stamina or 100 }, c.mana and { "mana", C.mana, c.mana } or nil }
+	for i, chip in ipairs(UI.statChips) do
+		local st = stats[i]
+		chip.root.Visible = st ~= nil
+		if st then
+			for _, ch in ipairs(chip.icon:GetChildren()) do ch:Destroy() end
+			U.icon(chip.icon, ICON[st[1]], 2, { ["#"] = st[2], o = C.white }, { ZIndex = 43 })
+			chip.text.Visible = not st[4]
+			chip.text.Text = tostring(st[3])
+			chip.text.TextColor3 = st[2]
+			for k, pip in ipairs(chip.pips) do
+				pip.Visible = st[4] == true
+				pip.BackgroundColor3 = k <= st[3] and st[2] or Color3.fromRGB(40, 36, 44)
+			end
 		end
-		local v = c[kind] or 0
-		for i, p in ipairs(row.pips) do
-			p.BackgroundColor3 = i <= v and STAT_ICONS[kind][2] or Color3.fromRGB(40, 36, 44)
+	end
+	for i, row in ipairs(UI.skillRows) do
+		local sk = c.skills and c.skills[i]
+		row.root.Visible = sk ~= nil
+		if sk then
+			for _, ch in ipairs(row.body:GetChildren()) do
+				if ch.Name == "SkIcon" then ch:Destroy() end
+			end
+			local ic = skillIcon(row.body, sk, c, 24, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 44 })
+			ic.Name = "SkIcon"
+			row.title.Text = "[" .. (sk.key or (i == 1 and "Q" or "E")) .. "] " .. sk.name
+			row.title.TextColor3 = rc
+			row.text.Text = sk.text or ""
+			U.edge(row.edges, rc)
 		end
 	end
-	for _, ch in ipairs(UI.infoAbBody:GetChildren()) do
-		if ch:IsA("Frame") and ch.Name == "AbIcon" then ch:Destroy() end
-	end
-	if c.ability then
-		local grid = ICON[ABILITY_ICON[c.ability.id] or "star"]
-		local ic = U.icon(UI.infoAbBody, grid, math.max(2, math.floor(30 / math.max(#grid[1], #grid))), { ["#"] = rc, o = C.white, x = C.ink, y = C.gold },
-			{ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 44 })
-		ic.Name = "AbIcon"
-		UI.infoAbility.Text = "[Q] " .. c.ability.name .. " — " .. c.ability.text
-	else
-		UI.infoAbility.Text = ""
-	end
-	U.edge(UI.infoAbEdges, rc)
 	local locked = gameState:GetAttribute("SelectLocked") == true
 	if myPick == c.id then
 		setConfirm("ВЫБРАН", Color3.fromRGB(40, 120, 60), C.gold)
@@ -1680,7 +1772,7 @@ local function buildSelection()
 		local _, body, edges = U.panel(lift, { Size = UDim2.fromScale(1, 1), ZIndex = 44 }, c.killer and Color3.fromRGB(26, 12, 14) or C.panel, roleColor(c), 4)
 		-- арт героя на фоне его цвета
 		local art = make("Frame", {
-			Position = UDim2.fromOffset(4, 4), Size = UDim2.new(1, -8, 0, 140), BackgroundColor3 = acc:Lerp(C.black, 0.45),
+			Position = UDim2.fromOffset(4, 4), Size = UDim2.new(1, -8, 0, 160), BackgroundColor3 = acc:Lerp(C.black, 0.45),
 			BorderSizePixel = 0, ZIndex = 45, ClipsDescendants = true,
 		}, body)
 		make("UIGradient", { Rotation = 90, Color = ColorSequence.new(C.white, Color3.fromRGB(40, 30, 40)) }, art)
@@ -1688,13 +1780,13 @@ local function buildSelection()
 			make("Frame", { Position = UDim2.fromOffset(0, 10 + k * 18), Size = UDim2.new(1, 0, 0, 2), BackgroundColor3 = C.black,
 				BackgroundTransparency = 0.75, BorderSizePixel = 0, ZIndex = 45 }, art)
 		end
-		local face = make("Frame", { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.fromOffset(124, 124),
+		local face = make("Frame", { AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, 0), Size = UDim2.fromOffset(136, 136),
 			BackgroundTransparency = 1, ZIndex = 46 }, art)
 		portrait(face, c, 46)
 		roleIcon(body, c, 3, { Position = UDim2.fromOffset(8, 8), ZIndex = 49 })
 		-- табличка с именем
 		local plate = make("Frame", {
-			Position = UDim2.fromOffset(4, 148), Size = UDim2.new(1, -8, 0, 46), BackgroundColor3 = C.ink, BorderSizePixel = 0, ZIndex = 48,
+			Position = UDim2.fromOffset(4, 168), Size = UDim2.new(1, -8, 0, 46), BackgroundColor3 = C.ink, BorderSizePixel = 0, ZIndex = 48,
 		}, body)
 		make("Frame", { Size = UDim2.new(1, 0, 0, 3), BackgroundColor3 = roleColor(c), BorderSizePixel = 0, ZIndex = 49 }, plate)
 		make("TextLabel", {
@@ -1711,7 +1803,7 @@ local function buildSelection()
 			BorderSizePixel = 0, ZIndex = 50, Visible = false,
 		}, body)
 		local badge, badgeBody = U.panel(body, {
-			AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 128), Size = UDim2.new(1, 8, 0, 24), Rotation = -6,
+			AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.new(0.5, 0, 0, 142), Size = UDim2.new(1, 8, 0, 24), Rotation = -6,
 			ZIndex = 52, Visible = false,
 		}, C.gold, C.ink, 2)
 		local badgeText = make("TextLabel", {
@@ -1900,12 +1992,13 @@ end
 ------------------------------------------------------------------------
 local TIPS = {
 	"Shift — бег. Выдохся — подожди, пока молния восстановится.",
-	"Q — способность героя. У каждого она своя.",
-	"Станнеры (Алекс, Айша) могут оглушить Палача.",
-	"Поддержка (Лилиан, Грег) лечит и бодрит тех, кто рядом.",
-	"Выживальщики (Оскар, Феликс) рассчитывают только на себя.",
-	"Выход откроется за минуту до конца. Ищи ворота с зелёной лампой.",
-	"Петляй вокруг укрытий и по рампам — по прямой Палач догонит.",
+	"Q и E — два навыка героя. Ctrl — включить или выключить shift-lock.",
+	"Прыгать нельзя: петляй вокруг укрытий и по рампам.",
+	"Алекс и Айша умеют оглушать Палача. Контр-удар и щит отражают удар.",
+	"Лилиан встала в позу лечения? Подойди к ней и нажми F.",
+	"Станции Грега лечат и ускоряют, а растяжка тормозит Палача.",
+	"Оскар видит всех сквозь стены, а Феликс копит ману для телекинеза.",
+	"Выход откроется за минуту до конца. Ищи значок двери.",
 	"Удар Палача на миг ускоряет тебя — используй, чтобы оторваться.",
 	"Каждое убийство добавляет Палачу 20 секунд.",
 	"Погиб или сбежал? Нажми «Наблюдать за матчем».",
@@ -2063,20 +2156,13 @@ end
 local flickerClock = 0
 
 ------------------------------------------------------------------------
--- МЕТКА ВЫХОДА: пиксельная дверь над воротами или стрелка у края экрана
+-- МЕТКА ВЫХОДА: только пиксельная дверь (над воротами или у края экрана), без названия и расстояния
 ------------------------------------------------------------------------
 UI.exitMarker = make("Frame", {
-	AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(64, 64), BackgroundTransparency = 1, Visible = false, ZIndex = 12,
+	AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(40, 40), BackgroundTransparency = 1, Visible = false, ZIndex = 12,
 }, gui)
-UI.exitDoor, UI.exitDoorParts = U.icon(UI.exitMarker, ICON.door, 4, { ["#"] = C.hp, o = C.ink },
-	{ AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), ZIndex = 12 })
-UI.exitDist = make("TextLabel", {
-	AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.new(0.5, 0, 0, 36), Size = UDim2.fromOffset(80, 18), BackgroundTransparency = 1,
-	ZIndex = 12, Font = F.pix, TextSize = 14, TextColor3 = C.hp, TextStrokeTransparency = 0, Text = "",
-}, UI.exitMarker)
-UI.exitArrow = make("Frame", { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), Size = UDim2.fromOffset(88, 88),
-	BackgroundTransparency = 1, ZIndex = 12, Visible = false }, UI.exitMarker)
-U.icon(UI.exitArrow, ICON.arrow, 3, { ["#"] = C.hp }, { AnchorPoint = Vector2.new(0.5, 0), Position = UDim2.fromScale(0.5, 0), ZIndex = 12 })
+UI.exitDoor, UI.exitDoorParts = U.icon(UI.exitMarker, ICON.door, 5, { ["#"] = C.hp, o = C.ink },
+	{ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 12 })
 
 -- звёзды перед глазами оглушённого Палача
 UI.dizzyRoot = make("Frame", {
@@ -2109,11 +2195,6 @@ local function refreshTop()
 	elseif phase == "Selection" and gameState:GetAttribute("SelectLocked") and myList then
 		U.gtext(UI.headerG, "ВСЕ НА СЦЕНЕ!")
 		U.gburst(UI.headerG, 0.6)
-	elseif phase == "Match" then
-		if gameState:GetAttribute("EscapeOpen") then
-			text = "ВЫХОД ОТКРЫТ: " .. (gameState:GetAttribute("ExitName") or "")
-			col = C.hp
-		end
 	elseif phase == "Ending" then
 		text = "МАТЧ ОКОНЧЕН"
 	end
@@ -2128,6 +2209,7 @@ local function refreshTop()
 	U.tint(UI.doorParts, "o", open and C.ink or C.blood)
 end
 
+local placing, setPlacing = false, nil -- режим выбора станции Грега (см. «НАВЫКИ»)
 local lastBars = false
 function refreshVisibility()
 	local phase = gameState:GetAttribute("Phase")
@@ -2145,8 +2227,13 @@ function refreshVisibility()
 	setBust(bars)
 	UI.hintRoot.Visible = bars
 	UI.hintHit.Visible = role == "Killer"
+	UI.manaRow.Visible = bars and player:GetAttribute("MaxMana") ~= nil
 	if UI.touchSprint then UI.touchSprint.Visible = bars end
-	if UI.touchAbility then UI.touchAbility.Visible = bars end
+	if UI.touchSkills then
+		local c = myChar()
+		for i, t in ipairs(UI.touchSkills) do t.button.Visible = bars and c ~= nil and c.skills ~= nil and c.skills[i] ~= nil end
+	end
+	if not bars and placing and setPlacing then setPlacing(false) end
 	if bars ~= lastBars then
 		lastBars = bars
 		if bars then sprintHeld = false end
@@ -2188,16 +2275,23 @@ local function refreshSelfStyle()
 	if killer then UI.selfName.Text ..= "  x" .. tostring(player:GetAttribute("Kills") or 0) end
 	for _, ch in ipairs(UI.selfRoleHolder:GetChildren()) do ch:Destroy() end
 	if c then roleIcon(UI.selfRoleHolder, c, 2, { ZIndex = 6 }) end
-	setAbilityIcon(c)
-	setHintAbility(c)
-	if UI.touchAbility and c and c.ability then
-		for _, ch in ipairs(UI.touchAbility:GetChildren()) do
-			if ch.Name == "AbIcon" then ch:Destroy() end
+	setSlotIcons(c)
+	setHintSkills(c)
+	if UI.touchSkills and c then
+		for i, t in ipairs(UI.touchSkills) do
+			local sk = c.skills and c.skills[i]
+			local id = sk and (c.id .. ":" .. sk.id)
+			if id ~= t.iconFor then
+				t.iconFor = id
+				for _, ch in ipairs(t.button:GetChildren()) do
+					if ch.Name == "SkIcon" then ch:Destroy() end
+				end
+				if sk then
+					local ic = skillIcon(t.button, sk, c, 38, { AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 32 })
+					ic.Name = "SkIcon"
+				end
+			end
 		end
-		local grid = ICON[ABILITY_ICON[c.ability.id] or "star"]
-		local ic = U.icon(UI.touchAbility, grid, math.max(2, math.floor(40 / #grid[1])), { ["#"] = roleColor(c), o = C.white, x = C.ink, y = C.gold },
-			{ AnchorPoint = Vector2.new(0.5, 0.5), Position = UDim2.fromScale(0.5, 0.5), ZIndex = 32 })
-		ic.Name = "AbIcon"
 	end
 end
 
@@ -2213,6 +2307,14 @@ local function refreshStamina()
 	UI.stBar.fill.BackgroundColor3 = col
 	UI.stText.TextColor3 = col
 	U.tint(UI.boltParts, "#", col)
+end
+
+local function refreshMana()
+	local v = player:GetAttribute("Mana") or 0
+	local m = player:GetAttribute("MaxMana")
+	if not m then return end
+	UI.manaBar.fill.Size = UDim2.fromScale(math.clamp(v / math.max(m, 1), 0, 1), 1)
+	UI.manaText.Text = "x" .. tostring(v)
 end
 
 local function bindCharacter(char)
@@ -2246,10 +2348,41 @@ player.CharacterAdded:Connect(bindCharacter)
 if player.Character then task.spawn(bindCharacter, player.Character) end
 
 ------------------------------------------------------------------------
--- ЭФФЕКТЫ С СЕРВЕРА: удар, помехи, подсветка, прятки, оглушение, лечение, бумбокс
+-- ЭФФЕКТЫ С СЕРВЕРА: удары, помехи, подсветки, оглушение, ослепление, замедление, лечение
 ------------------------------------------------------------------------
 local revealHighlights = {}
 local vanishUntilLocal, stunUntilLocal = 0, 0
+-- временная подсветка персонажей сквозь стены (видна только этому игроку)
+local function xray(list, dur)
+	for _, h in ipairs(revealHighlights) do h:Destroy() end
+	revealHighlights = {}
+	for _, it in ipairs(list) do
+		local p = Players:GetPlayerByUserId(it.id)
+		if p and p ~= player and p.Character then
+			table.insert(revealHighlights, make("Highlight", {
+				FillColor = it.color, FillTransparency = 0.55, OutlineColor = C.white,
+				DepthMode = Enum.HighlightDepthMode.AlwaysOnTop,
+			}, p.Character))
+		end
+	end
+	local mine = revealHighlights
+	task.delay(dur, function()
+		for _, h in ipairs(mine) do h:Destroy() end
+	end)
+end
+
+-- отталкивание силовым щитом: персонаж Палача принадлежит его клиенту, поэтому толчок применяется здесь
+local function knockback(vel)
+	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+	if not hrp or typeof(vel) ~= "Vector3" then return end
+	local att = make("Attachment", { Name = "P2D_Knock" }, hrp)
+	local lv = make("LinearVelocity", { Attachment0 = att, MaxForce = 1e6, VectorVelocity = vel, RelativeTo = Enum.ActuatorRelativeTo.World }, hrp)
+	task.delay(0.22, function()
+		lv:Destroy()
+		att:Destroy()
+	end)
+end
+
 fxEvent.OnClientEvent:Connect(function(kind, a)
 	if kind == "hit" then
 		showStatic(0.15, 0.5)
@@ -2262,25 +2395,24 @@ fxEvent.OnClientEvent:Connect(function(kind, a)
 		showStatic(0.3, 0.4)
 		showToast("Где-то рядом хихикают… Бинки исчез", "bad")
 	elseif kind == "reveal" then
-		for _, h in ipairs(revealHighlights) do h:Destroy() end
-		revealHighlights = {}
+		local list = {}
 		for _, s in ipairs(decode("Roster", {})) do
-			if s.s == "alive" then
-				local p = Players:GetPlayerByUserId(s.id)
-				if p and p.Character then
-					-- локальная подсветка (видна только Сбою)
-					table.insert(revealHighlights, make("Highlight", {
-						FillColor = Color3.fromRGB(120, 235, 255), FillTransparency = 0.6,
-						OutlineColor = C.white, DepthMode = Enum.HighlightDepthMode.AlwaysOnTop,
-					}, p.Character))
-				end
-			end
+			if s.s == "alive" then table.insert(list, { id = s.id, color = Color3.fromRGB(120, 235, 255) }) end
 		end
+		xray(list, a or 5)
 		showStatic(0.4, 0.6)
-		task.delay(a or 5, function()
-			for _, h in ipairs(revealHighlights) do h:Destroy() end
-			revealHighlights = {}
-		end)
+	elseif kind == "godseye" then
+		-- «Божий глаз» Оскара: все выжившие (в цвете роли) и Палач (красный)
+		local list = {}
+		for _, s in ipairs(decode("Roster", {})) do
+			local c = charById[s.c or ""]
+			if s.s == "alive" then table.insert(list, { id = s.id, color = c and roleColor(c) or C.bone }) end
+		end
+		local k = decode("Killer", {})
+		if k.id then table.insert(list, { id = k.id, color = C.red }) end
+		xray(list, a or 5)
+		flash(Color3.fromRGB(255, 240, 180), 0.25, 0.6)
+		sfx("ping", 0.5, 0.7)
 	elseif kind == "vanish" then
 		vanishUntilLocal = os.clock() + (a or 6)
 		showToast("ТЫ НЕВИДИМ — удар раскроет тебя", "warn")
@@ -2292,20 +2424,48 @@ fxEvent.OnClientEvent:Connect(function(kind, a)
 		tween(blur, a or 2.5, { Size = 0 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 		showStatic(0.3, 0.7)
 		showToast("ТЫ ОГЛУШЁН!", "bad")
-	elseif kind == "flashed" then
+	elseif kind == "blinded" then
+		local t = a or 1.5
 		UI.whiteout.BackgroundTransparency = 0.02
-		tween(UI.whiteout, 2.4, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+		tween(UI.whiteout, t, { BackgroundTransparency = 1 }, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
 		blur.Size = 24
-		tween(blur, 2.6, { Size = 0 })
+		tween(blur, t + 0.2, { Size = 0 })
 		sfx("ping", 0.7, 1.6)
+	elseif kind == "slowed" then
+		flash(Color3.fromRGB(80, 140, 255), 0.25, 0.6)
+		showToast(string.format("ЗАМЕДЛЕН: −%d%%", a or 0), "bad")
+	elseif kind == "knockback" then
+		knockback(a)
+		showStatic(0.2, 0.5)
+	elseif kind == "blocked" then
+		flash(a == "shield" and Color3.fromRGB(90, 150, 255) or C.white, 0.3, 0.5)
+		showToast(a == "shield" and "ЩИТ ОТРАЗИЛ УДАР!" or "КОНТР-УДАР!", "good")
+		sfx("slash", 0.5, 1.4)
+	elseif kind == "adrenaline" then
+		flash(Color3.fromRGB(255, 60, 60), 0.2, 0.5)
+		sfx("ping", 0.5, 1.8)
 	elseif kind == "healed" then
 		flash(Color3.fromRGB(60, 255, 120), 0.3, 0.8)
-		showToast((a or "Союзник") .. ": аптечка! +35", "good")
+		showToast((a or "Медик") .. " лечит тебя: +50", "good")
 		sfx("ping", 0.5, 1.3)
-	elseif kind == "boost" then
-		flash(C.stBoost, 0.25, 0.8)
-		showToast((a or "Союзник") .. " врубил бумбокс — беги!", "good")
-		sfx("ping", 0.5, 1.5)
+	elseif kind == "healgiven" then
+		showToast("Ты вылечила: " .. tostring(a or "союзник"), "good")
+		sfx("ping", 0.5, 1.3)
+	elseif kind == "interrupted" then
+		showToast("Лечение сорвано!", "bad")
+		showStatic(0.15, 0.4)
+	elseif kind == "batbroke" then
+		showToast("Бита сломалась о лицо Палача!", "good")
+		sfx("slash", 0.6, 0.6)
+	elseif kind == "bathit" then
+		showToast("Попадание! Палач замедлен", "good")
+	elseif kind == "tkhit" then
+		showToast(string.format("Телекинез: Палач замедлен на %d%%", a or 0), "good")
+	elseif kind == "nomana" then
+		showToast("Мало маны", "warn")
+		sfx("tick", 0.4, 0.6)
+	elseif kind == "windup" then
+		sfx("tick", 0.4, 0.8)
 	end
 end)
 
@@ -2374,6 +2534,152 @@ function onPhase(force)
 	if crtIsOff and not keepsDark then screenOn(0.8) end
 	refreshTop()
 	refreshVisibility()
+end
+
+------------------------------------------------------------------------
+-- НАВЫКИ (Q / E), ВЫБОР СТАНЦИИ ГРЕГА, SHIFT-LOCK НА CTRL, БЕЗ ПРЫЖКОВ
+------------------------------------------------------------------------
+UI.placingUntil = 0
+do -- в блоке: у главного чанка Luau лимит 200 локальных
+	function setPlacing(on)
+		placing = on
+		UI.placeRoot.Visible = on
+		UI.placingUntil = on and os.clock() + 6 or 0
+		if on then
+			ContextActionService:BindActionAtPriority("HorrorPlace", function(_, state, input)
+				if state ~= Enum.UserInputState.Begin then return Enum.ContextActionResult.Sink end
+				if input.UserInputType == Enum.UserInputType.MouseButton1 or input.KeyCode == Enum.KeyCode.ButtonR2 then
+					chooseStation("heal")
+				elseif input.UserInputType == Enum.UserInputType.MouseButton2 or input.KeyCode == Enum.KeyCode.ButtonL2 then
+					chooseStation("speed")
+				end
+				return Enum.ContextActionResult.Sink
+			end, false, Enum.ContextActionPriority.High.Value + 1,
+				Enum.UserInputType.MouseButton1, Enum.UserInputType.MouseButton2, Enum.KeyCode.ButtonR2, Enum.KeyCode.ButtonL2)
+		else
+			ContextActionService:UnbindAction("HorrorPlace")
+		end
+	end
+
+	function chooseStation(kind)
+		if not placing then return end
+		setPlacing(false)
+		abilityEvent:FireServer(1, kind)
+		sfx("confirm", 0.5, 0.9)
+	end
+
+	local lastSkillPress = { 0, 0 }
+	function trySkill(slot)
+		if gameState:GetAttribute("Phase") ~= "Match" or not player:GetAttribute("InMatch") then return end
+		if player:GetAttribute("Role") ~= "Killer" and player:GetAttribute("Status") ~= "alive" then return end
+		local c = myChar()
+		local sk = c and c.skills and c.skills[slot]
+		if not sk then return end
+		local now = os.clock()
+		if now - lastSkillPress[slot] < 0.25 then return end
+		lastSkillPress[slot] = now
+		local sNow = Workspace:GetServerTimeNow()
+		-- активная стойка/поза: повторное нажатие уходит на сервер (сбросить щит, выйти из позы лечения)
+		if (sk.id == "shield" or sk.id == "heal") and (player:GetAttribute("Skill" .. slot .. "Until") or 0) > sNow then
+			abilityEvent:FireServer(slot)
+			return
+		end
+		if placing then
+			setPlacing(false)
+			return
+		end
+		if player:GetAttribute("Skill" .. slot .. "Broken") or sNow < (player:GetAttribute("Skill" .. slot .. "ReadyAt") or math.huge) then
+			sfx("tick", 0.3, 0.6)
+			return
+		end
+		if sk.id == "station" then
+			setPlacing(true)
+			sfx("tick", 0.5, 1.2)
+			return
+		end
+		local arg = nil
+		if sk.id == "telekinesis" then
+			-- прицел — направление камеры, почти горизонтально
+			camera = Workspace.CurrentCamera
+			local look = camera.CFrame.LookVector
+			local v = Vector3.new(look.X, look.Y * 0.3, look.Z)
+			arg = v.Magnitude > 0.01 and v.Unit or nil
+		end
+		abilityEvent:FireServer(slot, arg)
+		sfx("confirm", 0.45, 0.8)
+		U.edge(UI.slots[slot].edges, C.white)
+	end
+	ContextActionService:BindAction("HorrorSkill1", function(_, state)
+		if state == Enum.UserInputState.Begin then trySkill(1) end
+		return Enum.ContextActionResult.Pass
+	end, false, Enum.KeyCode.Q, Enum.KeyCode.ButtonY)
+	ContextActionService:BindAction("HorrorSkill2", function(_, state)
+		if state == Enum.UserInputState.Begin then trySkill(2) end
+		return Enum.ContextActionResult.Pass
+	end, false, Enum.KeyCode.E, Enum.KeyCode.ButtonB)
+
+	-- shift-lock на Ctrl: курсор в центре, персонаж смотрит туда же, куда камера, камера за плечом.
+	-- Встроенный shift-lock сервер отключает (Shift занят бегом).
+	local shiftLock = false
+	local function applyLockToChar()
+		local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+		if hum then
+			hum.AutoRotate = not shiftLock
+			hum.CameraOffset = shiftLock and Vector3.new(1.75, 0.25, 0) or Vector3.new()
+		end
+	end
+	local function setShiftLock(on)
+		shiftLock = on
+		applyLockToChar()
+		if not on then UserInputService.MouseBehavior = Enum.MouseBehavior.Default end
+		U.tint(UI.lockParts, "#", on and C.gold or C.edge)
+		sfx("tick", 0.35, on and 1.3 or 0.9)
+	end
+	ContextActionService:BindAction("HorrorShiftLock", function(_, state)
+		if state == Enum.UserInputState.Begin then setShiftLock(not shiftLock) end
+		return Enum.ContextActionResult.Pass
+	end, false, Enum.KeyCode.LeftControl, Enum.KeyCode.RightControl)
+	RunService:BindToRenderStep("P2D_ShiftLock", Enum.RenderPriority.Camera.Value + 1, function()
+		if not shiftLock then return end
+		camera = Workspace.CurrentCamera
+		local char = player.Character
+		local hum = char and char:FindFirstChildOfClass("Humanoid")
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if camOn or spectating or not hum or not hrp or hum.Health <= 0 or camera.CameraType ~= Enum.CameraType.Custom then
+			-- сцена выбора, наблюдение, смерть: курсор свободен
+			UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+			if hum then hum.AutoRotate = true end
+			return
+		end
+		hum.AutoRotate = false
+		UserInputService.MouseBehavior = Enum.MouseBehavior.LockCenter
+		if hrp.Anchored then return end
+		local look = camera.CFrame.LookVector
+		local flat = Vector3.new(look.X, 0, look.Z)
+		if flat.Magnitude > 0.01 then
+			hrp.CFrame = CFrame.lookAt(hrp.Position, hrp.Position + flat.Unit)
+		end
+	end)
+
+	-- прыжков нет (сервер обнуляет силу прыжка, клиент ещё и выключает состояние прыжка)
+	local function prepCharacter(char)
+		local hum = char:WaitForChild("Humanoid", 10)
+		if not hum then return end
+		pcall(function() hum:SetStateEnabled(Enum.HumanoidStateType.Jumping, false) end)
+		applyLockToChar()
+	end
+	player.CharacterAdded:Connect(prepCharacter)
+	if player.Character then task.spawn(prepCharacter, player.Character) end
+
+	-- подсказку «Лечение [F]» видят только другие живые выжившие
+	local function filterPrompt(prompt)
+		if not prompt:IsA("ProximityPrompt") then return end
+		if prompt:GetAttribute("OwnerId") == player.UserId or player:GetAttribute("Role") == "Killer" or player:GetAttribute("Status") ~= "alive" then
+			prompt.Enabled = false
+		end
+	end
+	for _, pr in ipairs(CollectionService:GetTagged("P2D_HealPrompt")) do filterPrompt(pr) end
+	CollectionService:GetInstanceAddedSignal("P2D_HealPrompt"):Connect(filterPrompt)
 end
 
 ------------------------------------------------------------------------
@@ -2455,37 +2761,46 @@ local function updateBars(dt, now)
 	return low, beat
 end
 
-local function updateAbility(now)
+local function updateSlots(now)
+	if placing and os.clock() > UI.placingUntil then setPlacing(false) end -- выбор станции гаснет сам
 	if not UI.selfRoot.Visible then return end
 	local c = myChar()
-	local ab = c and c.ability
 	local sNow = Workspace:GetServerTimeNow()
-	local readyAt = player:GetAttribute("AbilityReadyAt")
-	local untilT = player:GetAttribute("AbilityUntil") or 0
 	local stunned = (player:GetAttribute("StunnedUntil") or 0) > sNow
 	local rc = c and roleColor(c) or C.edge
-	UI.abActive.Visible = false
-	local cdText = ""
-	if stunned then
-		UI.abShade.Size = UDim2.fromScale(1, 1)
-		U.edge(UI.abEdges, C.red)
-	elseif ab and untilT > sNow and (ab.dur or 0) > 0 then
-		UI.abShade.Size = UDim2.fromScale(1, 0)
-		UI.abActive.Visible = true
-		UI.abActive.Size = UDim2.new(math.clamp((untilT - sNow) / ab.dur, 0, 1), 0, 0, 4)
-		U.edge(UI.abEdges, C.gold)
-	elseif not readyAt or readyAt > sNow then
-		local left = readyAt and (readyAt - sNow) or 0
-		local frac = (ab and readyAt) and math.clamp(left / math.max(ab.cd, 1), 0, 1) or 1
-		UI.abShade.Size = UDim2.fromScale(1, frac)
-		cdText = readyAt and tostring(math.ceil(left)) or ""
-		U.edge(UI.abEdges, C.edge)
-	else
-		UI.abShade.Size = UDim2.fromScale(1, 0)
-		U.edge(UI.abEdges, rc:Lerp(C.white, 0.5 + 0.5 * math.sin(now * 6)))
+	for i, sl in ipairs(UI.slots) do
+		local sk = c and c.skills and c.skills[i]
+		if sk then
+			local readyAt = player:GetAttribute("Skill" .. i .. "ReadyAt")
+			local untilT = player:GetAttribute("Skill" .. i .. "Until") or 0
+			local broken = player:GetAttribute("Skill" .. i .. "Broken") == true
+			sl.broken.Visible = broken
+			sl.active.Visible = false
+			local cdText = ""
+			if broken or stunned then
+				sl.shade.Size = UDim2.fromScale(1, 1)
+				U.edge(sl.edges, C.red)
+			elseif untilT > sNow and (sk.dur or 0) > 0 then
+				sl.shade.Size = UDim2.fromScale(1, 0)
+				sl.active.Visible = true
+				sl.active.Size = UDim2.new(math.clamp((untilT - sNow) / sk.dur, 0, 1), 0, 0, 4)
+				U.edge(sl.edges, C.gold)
+			elseif not readyAt or readyAt > sNow then
+				local left = readyAt and (readyAt - sNow) or 0
+				sl.shade.Size = UDim2.fromScale(1, readyAt and math.clamp(left / math.max(sk.cd, 1), 0, 1) or 1)
+				cdText = readyAt and tostring(math.ceil(left)) or ""
+				U.edge(sl.edges, C.edge)
+			elseif sk.id == "telekinesis" and (player:GetAttribute("Mana") or 0) < 5 then
+				sl.shade.Size = UDim2.fromScale(1, 1) -- телекинезу нужна мана
+				U.edge(sl.edges, C.edge)
+			else
+				sl.shade.Size = UDim2.fromScale(1, 0)
+				U.edge(sl.edges, rc:Lerp(C.white, 0.5 + 0.5 * math.sin(now * 6 + i)))
+			end
+			sl.cd.Text = cdText
+			if UI.touchSkills and UI.touchSkills[i] then UI.touchSkills[i].cd.Text = cdText end
+		end
 	end
-	UI.abCd.Text = cdText
-	if UI.touchCd then UI.touchCd.Text = cdText end
 end
 
 local function updateExitMarker(now, match)
@@ -2497,21 +2812,17 @@ local function updateExitMarker(now, match)
 	camera = Workspace.CurrentCamera
 	local sp = camera:WorldToViewportPoint(exitPos + Vector3.new(0, 8, 0))
 	local vp = camera.ViewportSize
-	local hrp = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
-	UI.exitDist.Text = string.format("%dM", math.floor(hrp and (hrp.Position - exitPos).Magnitude or 0))
-	local margin = 70
+	local margin = 50
 	if sp.Z > 0 and sp.X > margin and sp.X < vp.X - margin and sp.Y > margin and sp.Y < vp.Y - margin then
 		UI.exitMarker.Position = UDim2.fromOffset(sp.X, sp.Y)
-		UI.exitArrow.Visible = false
 	else
+		-- выход за кадром: значок прижимается к краю экрана со стороны выхода
 		local cx, cy = vp.X / 2, vp.Y / 2
 		local dx, dy = sp.X - cx, sp.Y - cy
 		if sp.Z <= 0 then dx, dy = -dx, -dy end
 		if math.abs(dx) < 1e-3 and math.abs(dy) < 1e-3 then dy = 1 end
-		local s = math.min((cx - margin) / math.max(math.abs(dx), 1e-3), (cy - margin) / math.max(math.abs(dy), 1e-3))
-		UI.exitMarker.Position = UDim2.fromOffset(cx + dx * s, cy + dy * s)
-		UI.exitArrow.Visible = true
-		UI.exitArrow.Rotation = math.deg(math.atan2(dy, dx)) + 90
+		local k = math.min((cx - margin) / math.max(math.abs(dx), 1e-3), (cy - margin) / math.max(math.abs(dy), 1e-3))
+		UI.exitMarker.Position = UDim2.fromOffset(cx + dx * k, cy + dy * k)
 	end
 	U.tint(UI.exitDoorParts, "#", C.hp, (math.floor(now * 2) % 2 == 0) and 0 or 0.45)
 end
@@ -2626,6 +2937,7 @@ RunService.RenderStepped:Connect(function(dt)
 	UI.listScale.Scale = math.clamp(math.min(sc, avail / math.max(rowCount * 84, 1)), 0.4, sc)
 	UI.selfScale.Scale = sc
 	UI.hintScale.Scale = sc
+	UI.placeScale.Scale = sc
 	UI.specScale.Scale = sc
 	UI.watchScale.Scale = sc
 	if not UI.resultsRoot.Visible then UI.resultsScale.Scale = sc end
@@ -2698,7 +3010,7 @@ RunService.RenderStepped:Connect(function(dt)
 		UI.bustCam.CFrame = CFrame.lookAt(target + Vector3.new((0.42 + sway) * d, 0.12 * d, -0.9 * d), target)
 	end
 
-	updateAbility(now)
+	updateSlots(now)
 	updateExitMarker(now, match)
 
 	-- оглушение: звёзды кружат перед глазами
@@ -2825,6 +3137,8 @@ end)
 player.AttributeChanged:Connect(function(name)
 	if name == "Stamina" or name == "MaxStamina" or name == "Exhausted" or name == "Boosted" then
 		refreshStamina()
+	elseif name == "Mana" or name == "MaxMana" then
+		refreshMana()
 	elseif name == "Role" or name == "Port" or name == "Kills" then
 		refreshSelfStyle()
 	end
