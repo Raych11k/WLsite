@@ -123,10 +123,44 @@ local F = {
 	med = Enum.Font.GothamMedium,
 }
 
+U.BUILD = "2026.10.09-b" -- должна совпадать с CONFIG.BUILD в GameServer
+print("[P2D] GameClient, сборка " .. U.BUILD)
+-- если в игре оказалась вторая копия клиента (например, скрипт лежит не в StarterPlayerScripts),
+-- работает только последняя: старый интерфейс убирается, старые обработчики замолкают
+U.CLIENT_ID = HttpService:GenerateGUID(false)
+player:SetAttribute("P2D_Client", U.CLIENT_ID)
+function U.current() return player:GetAttribute("P2D_Client") == U.CLIENT_ID end
+for _, n in ipairs({ "HorrorHUD", "P2D_Cursor", "LobbyScreenGui", "KillerMonitorGui" }) do
+	local old = player:WaitForChild("PlayerGui"):FindFirstChild(n)
+	if old then old:Destroy() end
+end
+
 local gui = make("ScreenGui", {
 	Name = "HorrorHUD", ResetOnSpawn = false, IgnoreGuiInset = true,
 	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
 }, player:WaitForChild("PlayerGui"))
+
+-- сборки сервера и клиента должны совпадать, иначе навыки и интерфейс работают по-старому
+UI.buildWarn = make("TextLabel", {
+	AnchorPoint = Vector2.new(0.5, 1), Position = UDim2.new(0.5, 0, 1, -6), Size = UDim2.new(0.9, 0, 0, 26),
+	BackgroundColor3 = Color3.fromRGB(150, 16, 24), BackgroundTransparency = 0.1, BorderSizePixel = 0, ZIndex = 120,
+	Font = Enum.Font.GothamBold, TextSize = 15, TextColor3 = Color3.new(1, 1, 1), Text = "", Visible = false,
+}, gui)
+local function checkBuild()
+	local sb = gameState:GetAttribute("Build")
+	local bad = sb ~= U.BUILD
+	UI.buildWarn.Visible = bad
+	if bad then
+		UI.buildWarn.Text = string.format("РАЗНЫЕ ВЕРСИИ СКРИПТОВ: GameServer %s, GameClient %s — замени оба скрипта", tostring(sb or "старый"), U.BUILD)
+		warn("[P2D] " .. UI.buildWarn.Text)
+	end
+end
+checkBuild()
+gameState:GetAttributeChangedSignal("Build"):Connect(checkBuild)
+task.spawn(function()
+	local hello = remotes:WaitForChild("Hello", 10)
+	if hello then hello:FireServer(U.BUILD) end
+end)
 
 -- общий масштаб HUD под размер экрана
 local function hudScale()
@@ -794,6 +828,12 @@ UI.objText = make("TextLabel", {
 	TextColor3 = C.bone, Text = "",
 }, UI.objBody)
 UI.objScale = make("UIScale", { Scale = 1 }, UI.objBox)
+-- «+20» у табло, когда Палачу добавили время
+UI.bonusPop = make("TextLabel", {
+	AnchorPoint = Vector2.new(0, 0.5), Position = UDim2.fromOffset(200, 146), Size = UDim2.fromOffset(80, 30), BackgroundTransparency = 1,
+	ZIndex = 8, Font = F.pix, TextSize = 24, TextColor3 = C.red, TextStrokeColor3 = C.black, TextStrokeTransparency = 0,
+	TextXAlignment = Enum.TextXAlignment.Left, Text = "", TextTransparency = 1,
+}, UI.clockRoot)
 
 local function rebuildPips()
 	for _, p in ipairs(UI.pips) do p:Destroy() end
@@ -866,12 +906,6 @@ local function buildCard(order, info, isKiller)
 		Font = F.pix, TextSize = 14, TextXAlignment = Enum.TextXAlignment.Left, TextColor3 = C.gold,
 		TextStrokeTransparency = 0, Text = isKiller and ("x" .. tostring(info.k or 0)) or (dead and "x0" or "x100"),
 	}, card)
-	-- тонкая полоса выносливости
-	local sb = make("Frame", {
-		Position = UDim2.fromOffset(40, 48), Size = UDim2.fromOffset(144, 4),
-		BackgroundColor3 = Color3.fromRGB(36, 36, 44), BorderSizePixel = 0, ZIndex = 3,
-	}, card)
-	local stamFill = make("Frame", { Size = UDim2.fromScale(1, 1), BackgroundColor3 = C.st, BorderSizePixel = 0, ZIndex = 4 }, sb)
 	-- порт P1..P6 (у Палача — череп уже на полосе)
 	if not isKiller then
 		make("TextLabel", {
@@ -880,7 +914,7 @@ local function buildCard(order, info, isKiller)
 			TextXAlignment = Enum.TextXAlignment.Left,
 		}, card)
 	end
-	table.insert(cards, { userId = info.id, isKiller = isKiller, bar = bar, cnt = cnt, stamFill = stamFill,
+	table.insert(cards, { userId = info.id, isKiller = isKiller, bar = bar, cnt = cnt,
 		rings = rings, status = status, frame = holder })
 end
 
@@ -890,12 +924,8 @@ local function rebuildRoster()
 	for _, cd in ipairs(cards) do cd.frame:Destroy() end
 	cards = {}
 	rowCount = 0
+	-- только выжившие: Палача в списке нет
 	local roster = decode("Roster", {})
-	local k = decode("Killer", {})
-	if k.id and k.id ~= player.UserId then
-		rowCount += 1
-		buildCard(0, k, true)
-	end
 	for i, s in ipairs(roster) do
 		if s.id ~= player.UserId then
 			rowCount += 1
@@ -1273,6 +1303,7 @@ local function showToast(text, kind)
 	end)
 end
 announceEvent.OnClientEvent:Connect(function(text, kind)
+	if not U.current() then return end
 	showToast(text, kind)
 	if kind == "bad" then sfx("slash", 0.3, 0.6) else sfx("ping", 0.35, kind == "warn" and 0.8 or 1) end
 end)
@@ -2175,8 +2206,16 @@ for _ = 1, 5 do
 end
 UI.heartScale = make("UIScale", { Scale = 1 }, UI.heartIcon)
 
+-- свой герой: по атрибуту персонажа, а если его нет — по списку игроков матча
 local function myChar()
 	local id = player.Character and player.Character:GetAttribute("CharId")
+	if not id and player:GetAttribute("InMatch") then
+		for _, s in ipairs(decode("Roster", {})) do
+			if s.id == player.UserId then id = s.c end
+		end
+		local k = decode("Killer", {})
+		if not id and k.id == player.UserId then id = k.c end
+	end
 	return id and charById[id] or nil
 end
 
@@ -2195,6 +2234,9 @@ local function refreshTop()
 	elseif phase == "Selection" and gameState:GetAttribute("SelectLocked") and myList then
 		U.gtext(UI.headerG, "ВСЕ НА СЦЕНЕ!")
 		U.gburst(UI.headerG, 0.6)
+	elseif phase == "Match" and gameState:GetAttribute("EscapeOpen") then
+		text = "ВЫХОД ОТКРЫТ" -- только зелёная строка: без названия выхода и расстояния
+		col = C.hp
 	elseif phase == "Ending" then
 		text = "МАТЧ ОКОНЧЕН"
 	end
@@ -2384,6 +2426,7 @@ local function knockback(vel)
 end
 
 fxEvent.OnClientEvent:Connect(function(kind, a)
+	if not U.current() then return end
 	if kind == "hit" then
 		showStatic(0.15, 0.5)
 	elseif kind == "landed" then
@@ -2680,6 +2723,30 @@ do -- в блоке: у главного чанка Luau лимит 200 лока
 	end
 	for _, pr in ipairs(CollectionService:GetTagged("P2D_HealPrompt")) do filterPrompt(pr) end
 	CollectionService:GetInstanceAddedSignal("P2D_HealPrompt"):Connect(filterPrompt)
+
+	-- свой курсор: полупрозрачная точка вместо системной стрелки (в shift-lock она же — прицел в центре)
+	local GuiService = game:GetService("GuiService")
+	local cursorGui = make("ScreenGui", { Name = "P2D_Cursor", ResetOnSpawn = false, IgnoreGuiInset = true, DisplayOrder = 1000 }, player.PlayerGui)
+	local dot = make("Frame", {
+		AnchorPoint = Vector2.new(0.5, 0.5), Size = UDim2.fromOffset(12, 12), BackgroundColor3 = C.white,
+		BackgroundTransparency = 0.45, BorderSizePixel = 0, ZIndex = 10, Visible = false,
+	}, cursorGui)
+	corner(dot, UDim.new(1, 0))
+	stroke(dot, C.black, 1.5, 0.6)
+	RunService:BindToRenderStep("P2D_Cursor", Enum.RenderPriority.Last.Value, function()
+		if not U.current() then
+			cursorGui.Enabled = false
+			return
+		end
+		-- в меню Roblox нужна обычная стрелка
+		local custom = UserInputService.MouseEnabled and not GuiService.MenuIsOpen
+		UserInputService.MouseIconEnabled = not custom
+		dot.Visible = custom
+		if custom then
+			local m = UserInputService:GetMouseLocation()
+			dot.Position = UDim2.fromOffset(m.X, m.Y)
+		end
+	end)
 end
 
 ------------------------------------------------------------------------
@@ -2753,9 +2820,6 @@ local function updateBars(dt, now)
 			cd.bar.ghost.Size = UDim2.fromScale(cd.bar.ghostF, 1)
 			cd.bar.fill.BackgroundColor3 = U.hpColor(hf)
 			cd.cnt.Text = "x" .. tostring(math.max(0, math.ceil(hum.Health)))
-			local v = p:GetAttribute("Stamina")
-			local m = p:GetAttribute("MaxStamina")
-			if v and m then cd.stamFill.Size = UDim2.fromScale(math.clamp(v / math.max(m, 1), 0, 1), 1) end
 		end
 	end
 	return low, beat
@@ -2926,6 +2990,7 @@ local function updateWorld(dt, now)
 end
 
 RunService.RenderStepped:Connect(function(dt)
+	if not U.current() then return end
 	local now = os.clock()
 	local phase = gameState:GetAttribute("Phase")
 	local t = gameState:GetAttribute("TimeLeft") or 0
@@ -2953,10 +3018,23 @@ RunService.RenderStepped:Connect(function(dt)
 
 	local smooth = t
 	if timed then smooth = t - math.clamp(now - timeChangedAt, 0, 0.999) end
-	if math.abs(smooth - shownT) > 1.2 then
+	local ba = UI.bonusAnim
+	if ba then
+		-- +время Палачу: табло сперва замирает, потом не спеша дотягивается до нового значения
+		if now >= ba.start then
+			local a = math.clamp((now - ba.start) / ba.dur, 0, 1)
+			local e = a * a * (3 - 2 * a)
+			shownT = ba.from + (smooth - ba.from) * e
+			if a >= 1 then UI.bonusAnim = nil end
+		end
+		local pa = math.clamp((now - ba.born) / (ba.start - ba.born + ba.dur), 0, 1)
+		UI.bonusPop.Position = UDim2.fromOffset(200, 146 - 26 * pa)
+		UI.bonusPop.TextTransparency = pa < 0.7 and 0 or (pa - 0.7) / 0.3
+	elseif math.abs(smooth - shownT) > 1.2 then
 		shownT = approach(shownT, smooth, dt, 5)
 	else
 		shownT = smooth
+		UI.bonusPop.TextTransparency = 1
 	end
 	if timed then U.gtext(UI.timeG, fmt(math.ceil(shownT))) end
 	UI.secondHand.Rotation = timed and -(shownT % 60) * 6 or now * 90
@@ -3120,6 +3198,10 @@ gameState.AttributeChanged:Connect(function(name)
 			lastBonusSeq = seq
 			glow = 1
 			U.gburst(UI.timeG, 0.8)
+			local o = os.clock()
+			UI.bonusAnim = { from = shownT, born = o, start = o + 1.1, dur = 3.2 }
+			UI.bonusPop.Text = "+" .. tostring(gameState:GetAttribute("BonusAmount") or 20)
+			UI.bonusPop.TextTransparency = 0
 		end
 	elseif name == "EscapeOpen" then
 		if gameState:GetAttribute("EscapeOpen") then

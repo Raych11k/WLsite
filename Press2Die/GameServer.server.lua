@@ -43,7 +43,9 @@ local CONFIG = {
 	REVEAL_TIME = 2,          -- пауза «все на сцене» перед матчем
 	KILL_BONUS_TIME = 20,     -- +секунд к матчу за убийство выжившего
 	FADE_TIME = 1.2,          -- пауза под затемнение между этапами
-	SURVIVOR_SPEED = 14,      -- шаг (снижен, чтобы бег и ускорения ощущались отчётливо)
+	BUILD = "2026.10.09-b",   -- версия сборки: клиент сверяет её со своей и предупреждает о старом GameClient
+	LOBBY_SPEED = 16,         -- шаг в лобби (быстрый, как раньше)
+	SURVIVOR_SPEED = 14,      -- шаг в раунде (снижен, чтобы бег и ускорения ощущались отчётливо)
 	KILLER_SPEED = 16,
 	SURVIVOR_SPRINT_SPEED = 23,
 	KILLER_SPRINT_SPEED = 25,
@@ -123,7 +125,7 @@ Players.RespawnTime = 3
 -- без прыжков и без встроенного shift-lock: Shift — это бег, свой shift-lock на Ctrl делает клиент
 do
 	local sp = game:GetService("StarterPlayer")
-	sp.CharacterWalkSpeed = CONFIG.SURVIVOR_SPEED
+	sp.CharacterWalkSpeed = CONFIG.LOBBY_SPEED
 	sp.CharacterUseJumpPower = true
 	sp.CharacterJumpPower = 0
 	sp.CharacterJumpHeight = 0
@@ -168,6 +170,15 @@ local abilityEvent = remote("Ability")        -- клиент: способно�
 local fxEvent = remote("Fx")                  -- сервер: эффекты для конкретного игрока
 local resultsEvent = remote("Results")        -- сервер: итоги матча
 local spectateEvent = remote("Spectate")      -- клиент: за кем наблюдаю (для стриминга)
+-- клиент сообщает номер своей сборки: так видно, что GameClient запущен и не устарел
+remote("Hello").OnServerEvent:Connect(function(p, build)
+	p:SetAttribute("P2D_ClientBuild", tostring(build))
+	if build ~= CONFIG.BUILD then
+		warn(string.format("[P2D] У %s GameClient сборки %s, а GameServer — %s. Замени LocalScript GameClient целиком.", p.Name, tostring(build), CONFIG.BUILD))
+	end
+end)
+gameState:SetAttribute("Build", CONFIG.BUILD)
+print("[P2D] GameServer, сборка " .. CONFIG.BUILD)
 
 gameState:SetAttribute("Phase", "Waiting") -- Waiting | Countdown | ToSelection | Selection | Starting | Match | Ending | Returning
 gameState:SetAttribute("TimeLeft", 0)
@@ -1011,6 +1022,7 @@ end
 
 -- внешний вид персонажа: костюм вместо тела, обводка цвета роли
 local function applyLook(char, c)
+	char:SetAttribute("CharId", c.id)
 	local ok, err = pcall(function()
 		local spec = COSTUME[c.id]
 		local old = char:FindFirstChild("P2D_Gear")
@@ -2782,7 +2794,8 @@ end)
 ------------------------------------------------------------------------
 -- СМЕРТЬ / ПОБЕГ
 ------------------------------------------------------------------------
-local function markDead(e, text)
+-- без всплывающих сообщений: гибель видна по статусу в списке игроков
+local function markDead(e)
 	if e.status ~= "alive" then return end
 	e.status = "dead"
 	e.player:SetAttribute("Status", "dead")
@@ -2790,7 +2803,6 @@ local function markDead(e, text)
 	clearStamina(e.player)
 	removeFlashlight(e.player.Character)
 	publishRoster()
-	announce(text or said(e, "погиб", "погибла"), "bad")
 end
 
 local function markEscaped(e)
@@ -2803,7 +2815,7 @@ local function markEscaped(e)
 	removeFlashlight(char)
 	if char then
 		local hum = char:FindFirstChildOfClass("Humanoid")
-		if hum then hum.WalkSpeed = CONFIG.SURVIVOR_SPEED end
+		if hum then hum.WalkSpeed = CONFIG.LOBBY_SPEED end
 		char:PivotTo(lobbyCFrame())
 	end
 	publishRoster()
@@ -3893,7 +3905,7 @@ local function freezePlayers(on, only)
 		if not only or only[p] then
 			local hum = p.Character and p.Character:FindFirstChildOfClass("Humanoid")
 			if hum then
-				hum.WalkSpeed = on and 0 or CONFIG.SURVIVOR_SPEED
+				hum.WalkSpeed = on and 0 or CONFIG.LOBBY_SPEED
 				noJump(hum)
 			end
 		end
@@ -4051,6 +4063,7 @@ end
 -- +время за убийство; клиент по BonusSeq плавно краснит часы
 local function addMatchTime(sec)
 	matchEndAt += sec
+	gameState:SetAttribute("BonusAmount", sec)
 	gameState:SetAttribute("BonusSeq", (gameState:GetAttribute("BonusSeq") or 0) + 1)
 end
 
@@ -4200,7 +4213,6 @@ local function runMatch(mapKey)
 			local e = openRandomEscape(def) -- открывается ОДИН случайный выход
 			gameState:SetAttribute("EscapeOpen", true)
 			gameState:SetAttribute("ExitPos", e.zone.Position)
-			announce("ВЫХОД ОТКРЫТ! Ищи значок двери", "warn")
 		end
 		checkEscapes(def)
 
@@ -4213,7 +4225,7 @@ local function runMatch(mapKey)
 			announce("ВРЕМЯ ВЫШЛО!", "warn")
 			for _, e in ipairs(survivorList) do
 				if e.status == "alive" then
-					markDead(e, said(e, "не успел", "не успела") .. " сбежать")
+					markDead(e)
 					local h = e.player.Character and e.player.Character:FindFirstChildOfClass("Humanoid")
 					if h then h.Health = 0 end
 				end
@@ -4271,6 +4283,12 @@ end)
 
 local function onPlayerAdded(p)
 	p:SetAttribute("InMatch", false)
+	pcall(function() p.DevEnableMouseLock = false end) -- встроенный shift-lock на Shift выключен: Shift — бег
+	task.delay(20, function()
+		if p.Parent == Players and not p:GetAttribute("P2D_ClientBuild") then
+			warn("[P2D] " .. p.Name .. ": GameClient не отозвался. Проверь, что свежий LocalScript GameClient лежит в StarterPlayer > StarterPlayerScripts (одна копия).")
+		end
+	end)
 	p.CharacterAdded:Connect(function(char)
 		local hum = char:WaitForChild("Humanoid", 5)
 		if hum then noJump(hum) end
@@ -4291,7 +4309,7 @@ for _, p in ipairs(Players:GetPlayers()) do onPlayerAdded(p) end
 Players.PlayerRemoving:Connect(function(p)
 	if matchActive then
 		local e = entryOf[p]
-		if e then markDead(e, said(e, "покинул", "покинула") .. " игру") end
+		if e then markDead(e) end
 	end
 	stamina[p] = nil
 	boostUntil[p] = nil
