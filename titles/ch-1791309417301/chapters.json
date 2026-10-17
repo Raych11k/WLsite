@@ -43,5 +43,24 @@
       "titles/ch-1791309417301/chapters/vol-1-ch-2/010.webp"
     ],
     "createdAt": "2026-10-06T18:05:30.753Z"
+  },
+  {
+    "id": "vol-1-ch-3",
+    "volume": 1,
+    "number": "3",
+    "pagesCount": 10,
+    "pages": [
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/001.webp",
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/002.webp",
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/003.webp",
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/004.webp",
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/005.webp",
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/006.webp",
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/007.webp",
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/008.webp",
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/009.webp",
+      "titles/ch-1791309417301/chapters/vol-1-ch-3/010.webp"
+    ],
+    "createdAt": "2026-10-17T21:29:00.520Z"
   }
 ]
